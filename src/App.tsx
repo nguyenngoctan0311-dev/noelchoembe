@@ -20,7 +20,7 @@ import { GestureRecognizer, FilesetResolver, DrawingUtils } from "@mediapipe/tas
 // --- CẤU HÌNH ĐƯỜNG DẪN ---
 const BASE_URL = import.meta.env.BASE_URL;
 
-// --- MỚI: ĐƯỜNG DẪN NHẠC (Đảm bảo file mp3 nằm trong thư mục public) ---
+// --- ĐƯỜNG DẪN NHẠC ---
 const MUSIC_PATH = `${BASE_URL}bg-music.mp3`;
 
 const TOTAL_NUMBERED_PHOTOS = 15;
@@ -333,7 +333,7 @@ const TopStar = ({ state }: { state: 'CHAOS' | 'FORMED' }) => {
   );
 };
 
-// --- MỚI: COMPONENT TRÁI TIM 3D KHỔNG LỒ ---
+// --- MỚI: COMPONENT TRÁI TIM 3D (ĐÃ FIX LỖI ẨN/HIỆN) ---
 const BigHeart = ({ show }: { show: boolean }) => {
     const meshRef = useRef<THREE.Mesh>(null);
     
@@ -351,34 +351,40 @@ const BigHeart = ({ show }: { show: boolean }) => {
         return shape;
     }, []);
 
-    // Kéo vân 3D (Extrude)
     const heartGeometry = useMemo(() => new THREE.ExtrudeGeometry(heartShape, {
         depth: 2, bevelEnabled: true, bevelSegments: 5, steps: 2, bevelSize: 1, bevelThickness: 1
     }), [heartShape]);
 
-    // Material đỏ phát sáng
     const heartMaterial = useMemo(() => new THREE.MeshStandardMaterial({
         color: "#D32F2F", emissive: "#FF0000", emissiveIntensity: 0.8, roughness: 0.1, metalness: 0.5
     }), []);
 
-    // Hiệu ứng đập thình thịch
+    // --- FIX LỖI Ở ĐÂY: Logic Scale mượt mà ---
     useFrame((state) => {
-        if (meshRef.current && show) {
+        if (meshRef.current) { 
             const time = state.clock.elapsedTime;
-            const beat = 1 + Math.sin(time * 8) * 0.05; // Nhịp đập nhanh
-            // Lerp scale để hiện/ẩn mượt mà
+            const beat = 1 + Math.sin(time * 8) * 0.05; 
+            
+            // Nếu show=true thì scale = beat, nếu show=false thì scale = 0
             const targetScale = show ? beat * 0.8 : 0;
+            
+            // Lerp để hiệu ứng to nhỏ mượt mà
             meshRef.current.scale.lerp(new THREE.Vector3(targetScale, targetScale, targetScale), 0.1);
         }
     });
 
     return (
-        // Đặt vị trí ở giữa cây, xoay ngược lại cho đúng chiều
         <group rotation={[Math.PI, 0, 0]} position={[0, 5, 0]}> 
-            {/* Căn giữa tâm xoay của trái tim */}
-            <mesh ref={meshRef} geometry={heartGeometry} material={heartMaterial} position={[-2.5, -5, 0]}>
-            </mesh>
-            {show && <pointLight position={[0, -2, 2]} intensity={50} color="#FF0000" distance={20} />}
+            {/* QUAN TRỌNG: scale ban đầu là [0,0,0] để ẩn khi mới vào */}
+            <mesh 
+                ref={meshRef} 
+                geometry={heartGeometry} 
+                material={heartMaterial} 
+                position={[-2.5, -5, 0]} 
+                scale={[0, 0, 0]} 
+            />
+            {/* Đèn chỉ sáng khi show = true */}
+            <pointLight position={[0, -2, 2]} intensity={show ? 50 : 0} color="#FF0000" distance={20} />
         </group>
     );
 }
@@ -452,6 +458,8 @@ const GestureController = ({ onGesture, onMove, onStatus, debugMode, handRef, on
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
+  
+
   useEffect(() => {
     let gestureRecognizer: GestureRecognizer;
     let requestRef: number;
@@ -513,7 +521,6 @@ const GestureController = ({ onGesture, onMove, onStatus, debugMode, handRef, on
                 const thumbDist = Math.hypot(thumb1.x - thumb2.x, thumb1.y - thumb2.y);
 
                 // HEURISTIC: Nếu 2 đầu ngón trỏ gần nhau VÀ 2 đầu ngón cái gần nhau
-                // Ngưỡng 0.08 là tương đối, cần thử nghiệm thực tế
                 if (indexDist < 0.08 && thumbDist < 0.08) {
                     isHeartFound = true;
                     // Khi ghép tim thì tắt chế độ con trỏ 1 tay đi
@@ -556,7 +563,7 @@ const GestureController = ({ onGesture, onMove, onStatus, debugMode, handRef, on
     };
     setup();
     return () => cancelAnimationFrame(requestRef);
-  }, [onGesture, onMove, onStatus, debugMode, onHeartStatus]); // Thêm onHeartStatus vào dependency
+  }, [onGesture, onMove, onStatus, debugMode, onHeartStatus]);
 
   return (
     <>
@@ -576,7 +583,6 @@ const MusicPlayer = () => {
             if (isPlaying) {
                 audioRef.current.pause();
             } else {
-                // Trình duyệt yêu cầu tương tác người dùng mới được phát nhạc
                 audioRef.current.play().catch(e => console.error("Music playback failed:", e));
             }
             setIsPlaying(!isPlaying);
