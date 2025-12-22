@@ -226,9 +226,7 @@ const ChristmasElements = ({ state }: { state: 'CHAOS' | 'FORMED' }) => {
   const count = CONFIG.counts.elements;
   const groupRef = useRef<THREE.Group>(null);
   
-  // --- ĐÃ FIX LỖI Ở ĐÂY: Sửa 8 thành 0.8 để hộp quà vuông vắn ---
   const boxGeometry = useMemo(() => new THREE.BoxGeometry(0.8, 0.8, 0.8), []);
-  // -------------------------------------------------------------
   
   const sphereGeometry = useMemo(() => new THREE.SphereGeometry(0.5, 16, 16), []);
   const caneGeometry = useMemo(() => new THREE.CylinderGeometry(0.15, 0.15, 1.2, 8), []);
@@ -337,7 +335,7 @@ const TopStar = ({ state }: { state: 'CHAOS' | 'FORMED' }) => {
   );
 };
 
-// --- MỚI: COMPONENT TRÁI TIM PIXEL (Dùng Công thức Toán học - Đã sửa lỗi ngược & hình que) ---
+// --- MỚI: COMPONENT TRÁI TIM PIXEL (Dùng Công thức Toán học - Đã sửa lỗi ngược & hình que & KÍCH THƯỚC NHỎ) ---
 const BigHeart = ({ show }: { show: boolean }) => {
     const pointsRef = useRef<THREE.Points>(null);
     
@@ -371,8 +369,8 @@ const BigHeart = ({ show }: { show: boolean }) => {
     // 3. Material
     const material = useMemo(() => new THREE.PointsMaterial({
         color: "#FF0000",   
-        size: 6,            // Kích thước Pixel (đơn vị pixel màn hình)
-        sizeAttenuation: false, // QUAN TRỌNG: Tắt cái này để hạt luôn vuông, không bị méo
+        size: 3,            // <--- ĐÃ GIẢM KÍCH THƯỚC XUỐNG 3 PIXEL
+        sizeAttenuation: false, 
         transparent: true,
         opacity: 1.0,
     }), []);
