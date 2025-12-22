@@ -16,12 +16,15 @@ import { MathUtils } from 'three';
 import * as random from 'maath/random';
 import { GestureRecognizer, FilesetResolver, DrawingUtils } from "@mediapipe/tasks-vision";
 
-// --- 动态生成照片列表 (top.jpg + 1.jpg 到 31.jpg) ---
+// --- CẤU HÌNH ĐƯỜNG DẪN ẢNH (QUAN TRỌNG: SỬA LỖI 404) ---
+// Sử dụng BASE_URL từ Vite config để tự động thêm /noelchoembe/ vào trước
+const BASE_URL = import.meta.env.BASE_URL; 
+
 const TOTAL_NUMBERED_PHOTOS = 15;
-// 修改：将 top.jpg 加入到数组开头
+
 const bodyPhotoPaths = [
-  '/photos/top.jpg',
-  ...Array.from({ length: TOTAL_NUMBERED_PHOTOS }, (_, i) => `/photos/${i + 1}.jpg`)
+  `${BASE_URL}photos/top.jpg`, // Sửa: Thêm BASE_URL
+  ...Array.from({ length: TOTAL_NUMBERED_PHOTOS }, (_, i) => `${BASE_URL}photos/${i + 1}.jpg`) // Sửa: Thêm BASE_URL
 ];
 
 // --- 视觉配置 ---

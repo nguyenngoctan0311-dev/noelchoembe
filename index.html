@@ -4,10 +4,112 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>christmas-tree</title>
+    <title>Christmas Tree - Magic Hand Zoom</title>
+
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/control_utils/control_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
   </head>
   <body>
     <div id="root"></div>
+    
+    <video class="input_video" style="display:none"></video>
+    
+    <div id="hand-status" style="position: fixed; bottom: 10px; left: 10px; z-index: 9999; 
+         background: rgba(0,0,0,0.6); color: white; padding: 8px; border-radius: 6px; 
+         font-family: sans-serif; font-size: 12px; pointer-events: none;">
+      📷 Đang khởi động Camera...
+    </div>
+
     <script type="module" src="/src/main.tsx"></script>
+
+    <script>
+      (function() {
+        // --- CẤU HÌNH ---
+        // Chúng ta sẽ zoom thẻ 'root' vì toàn bộ web React nằm trong đó
+        const targetElement = document.getElementById('root'); 
+        const statusDiv = document.getElementById('hand-status');
+        const videoElement = document.querySelector('.input_video');
+        
+        let currentScale = 1.0;
+        const SENSITIVITY = 3.5; // Độ nhạy (Số càng lớn zoom càng nhanh)
+
+        // Hàm xử lý kết quả nhận diện
+        function onResults(results) {
+          if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
+            statusDiv.innerText = "👌 Đã nhận diện tay! Chụm/Mở để Zoom";
+            statusDiv.style.color = "#4ade80"; // Màu xanh lá
+
+            const landmarks = results.multiHandLandmarks[0];
+
+            // Lấy tọa độ đầu ngón cái (4) và đầu ngón trỏ (8)
+            const thumb = landmarks[4];
+            const indexFinger = landmarks[8];
+
+            // Tính khoảng cách (Pythagoras)
+            const distance = Math.sqrt(
+              Math.pow(thumb.x - indexFinger.x, 2) + 
+              Math.pow(thumb.y - indexFinger.y, 2)
+            );
+
+            // LOGIC ZOOM
+            // Khoảng cách thường từ 0.02 (chụm) đến 0.25 (mở)
+            // Công thức map khoảng cách sang scale
+            let targetScale = 1 + (distance * SENSITIVITY);
+
+            // Nếu chụm quá gần (< 0.05), reset về kích thước gốc
+            if (distance < 0.05) targetScale = 1.0;
+
+            // Giới hạn Zoom (Min 1x, Max 3x)
+            if (targetScale < 1.0) targetScale = 1.0;
+            if (targetScale > 3.0) targetScale = 3.0;
+
+            // Làm mượt chuyển động (Lerp)
+            currentScale = currentScale + (targetScale - currentScale) * 0.1;
+
+            // Áp dụng CSS vào React Root
+            if (targetElement) {
+              targetElement.style.transition = "transform 0.05s ease-out";
+              targetElement.style.transformOrigin = "center center";
+              targetElement.style.transform = `scale(${currentScale})`;
+            }
+
+          } else {
+            statusDiv.innerText = "✋ Giơ tay lên Camera để điều khiển";
+            statusDiv.style.color = "white";
+          }
+        }
+
+        // Khởi tạo MediaPipe
+        const hands = new Hands({locateFile: (file) => {
+          return `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`;
+        }});
+
+        hands.setOptions({
+          maxNumHands: 1,
+          modelComplexity: 1,
+          minDetectionConfidence: 0.5,
+          minTrackingConfidence: 0.5
+        });
+
+        hands.onResults(onResults);
+
+        // Khởi động Camera
+        const camera = new Camera(videoElement, {
+          onFrame: async () => {
+            await hands.send({image: videoElement});
+          },
+          width: 640,
+          height: 480
+        });
+        
+        camera.start().then(() => {
+             console.log("Camera started");
+        }).catch(err => {
+             statusDiv.innerText = "Lỗi Camera: " + err;
+        });
+
+      })();
+    </script>
   </body>
 </html>
