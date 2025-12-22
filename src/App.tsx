@@ -333,58 +333,77 @@ const TopStar = ({ state }: { state: 'CHAOS' | 'FORMED' }) => {
   );
 };
 
-// --- MỚI: COMPONENT TRÁI TIM 3D (ĐÃ FIX LỖI ẨN/HIỆN) ---
+// --- MỚI: COMPONENT TRÁI TIM PIXEL (Dùng Công thức Toán học - Không bao giờ lỗi) ---
 const BigHeart = ({ show }: { show: boolean }) => {
-    const meshRef = useRef<THREE.Mesh>(null);
+    const pointsRef = useRef<THREE.Points>(null);
     
-    // Tạo hình dáng trái tim 2D
-    const heartShape = useMemo(() => {
-        const shape = new THREE.Shape();
-        const x = 0, y = 0;
-        shape.moveTo(x + 2.5, y + 2.5);
-        shape.bezierCurveTo(x + 2.5, y + 2.5, x + 2.0, y, x, y);
-        shape.bezierCurveTo(x - 3.0, y, x - 3.0, y + 3.5, x - 3.0, y + 3.5);
-        shape.bezierCurveTo(x - 3.0, y + 5.5, x - 1.0, y + 7.7, x + 2.5, y + 9.5);
-        shape.bezierCurveTo(x + 6.0, y + 7.7, x + 8.0, y + 5.5, x + 8.0, y + 3.5);
-        shape.bezierCurveTo(x + 8.0, y + 3.5, x + 8.0, y, x + 5.0, y);
-        shape.bezierCurveTo(x + 3.5, y, x + 2.5, y + 2.5, x + 2.5, y + 2.5);
-        return shape;
+    // 1. Tạo dữ liệu các điểm (Positions)
+    const positions = useMemo(() => {
+        const particleCount = 3000; // Số lượng hạt
+        const pointsData = [];
+
+        for (let i = 0; i < particleCount; i++) {
+            // Sử dụng công thức toán học hình trái tim:
+            // x = 16sin^3(t)
+            // y = 13cos(t) - 5cos(2t) - 2cos(3t) - cos(4t)
+            const t = Math.random() * Math.PI * 2;
+            
+            // Để điểm nằm bên trong (chứ không chỉ ở viền), nhân với căn bậc 2 của số ngẫu nhiên
+            const r = Math.sqrt(Math.random()); 
+            
+            // Scale nhỏ lại (0.25) cho vừa với cây thông
+            const scale = 0.25;
+
+            const x = r * (16 * Math.pow(Math.sin(t), 3)) * scale;
+            const y = r * (13 * Math.cos(t) - 5 * Math.cos(2*t) - 2 * Math.cos(3*t) - Math.cos(4*t)) * scale;
+            const z = (Math.random() - 0.5) * 2; // Độ dày 3D
+
+            pointsData.push(x, y, z);
+        }
+        return new Float32Array(pointsData);
     }, []);
 
-    const heartGeometry = useMemo(() => new THREE.ExtrudeGeometry(heartShape, {
-        depth: 2, bevelEnabled: true, bevelSegments: 5, steps: 2, bevelSize: 1, bevelThickness: 1
-    }), [heartShape]);
+    // 2. Tạo Geometry
+    const geometry = useMemo(() => {
+        const geo = new THREE.BufferGeometry();
+        geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+        return geo;
+    }, [positions]);
 
-    const heartMaterial = useMemo(() => new THREE.MeshStandardMaterial({
-        color: "#D32F2F", emissive: "#FF0000", emissiveIntensity: 0.8, roughness: 0.1, metalness: 0.5
+    // 3. Material
+    const material = useMemo(() => new THREE.PointsMaterial({
+        color: "#FF0000",   
+        size: 0.15,         
+        sizeAttenuation: true, 
+        transparent: true,
+        opacity: 0.9,
     }), []);
 
-    // --- FIX LỖI Ở ĐÂY: Logic Scale mượt mà ---
+    // 4. Animation
     useFrame((state) => {
-        if (meshRef.current) { 
+        if (pointsRef.current) { 
             const time = state.clock.elapsedTime;
-            const beat = 1 + Math.sin(time * 8) * 0.05; 
+            const beat = 1 + Math.sin(time * 10) * 0.08; 
             
-            // Nếu show=true thì scale = beat, nếu show=false thì scale = 0
-            const targetScale = show ? beat * 0.8 : 0;
+            const targetScale = show ? beat * 1.2 : 0; 
             
-            // Lerp để hiệu ứng to nhỏ mượt mà
-            meshRef.current.scale.lerp(new THREE.Vector3(targetScale, targetScale, targetScale), 0.1);
+            pointsRef.current.scale.lerp(new THREE.Vector3(targetScale, targetScale, targetScale), 0.1);
+            
+            if (show) {
+                pointsRef.current.rotation.y += 0.005;
+            }
         }
     });
 
     return (
-        <group rotation={[Math.PI, 0, 0]} position={[0, 5, 0]}> 
-            {/* QUAN TRỌNG: scale ban đầu là [0,0,0] để ẩn khi mới vào */}
-            <mesh 
-                ref={meshRef} 
-                geometry={heartGeometry} 
-                material={heartMaterial} 
-                position={[-2.5, -5, 0]} 
+        <group rotation={[Math.PI, 0, 0]} position={[0, 6, 0]}> 
+            <points 
+                ref={pointsRef} 
+                geometry={geometry} 
+                material={material} 
                 scale={[0, 0, 0]} 
             />
-            {/* Đèn chỉ sáng khi show = true */}
-            <pointLight position={[0, -2, 2]} intensity={show ? 50 : 0} color="#FF0000" distance={20} />
+            <pointLight position={[0, 0, 2]} intensity={show ? 80 : 0} color="#FF0000" distance={25} decay={2} />
         </group>
     );
 }
@@ -410,7 +429,6 @@ const Cursor3D = ({ handRef }: { handRef: any }) => {
 }
 
 // --- Main Scene Experience ---
-// MỚI: Thêm prop showHeart
 const Experience = ({ sceneState, rotationSpeed, handRef, showHeart }: { sceneState: 'CHAOS' | 'FORMED', rotationSpeed: number, handRef: any, showHeart: boolean }) => {
   const controlsRef = useRef<any>(null);
   useFrame(() => {
@@ -439,7 +457,7 @@ const Experience = ({ sceneState, rotationSpeed, handRef, showHeart }: { sceneSt
            <ChristmasElements state={sceneState} />
            <FairyLights state={sceneState} />
            <TopStar state={sceneState} />
-           {/* MỚI: Thêm trái tim khổng lồ vào scene */}
+           {/* COMPONENT TRÁI TIM MỚI Ở ĐÂY */}
            <BigHeart show={showHeart} />
         </Suspense>
         <Sparkles count={600} scale={50} size={8} speed={0.4} opacity={0.4} color={CONFIG.colors.silver} />
@@ -453,7 +471,6 @@ const Experience = ({ sceneState, rotationSpeed, handRef, showHeart }: { sceneSt
 };
 
 // --- Gesture Controller ---
-// MỚI: Thêm prop onHeartStatus để báo cáo trạng thái tim
 const GestureController = ({ onGesture, onMove, onStatus, debugMode, handRef, onHeartStatus }: any) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -474,7 +491,7 @@ const GestureController = ({ onGesture, onMove, onStatus, debugMode, handRef, on
             delegate: "GPU"
           },
           runningMode: "VIDEO",
-          numHands: 2 // MỚI: Quan trọng! Cần nhận diện 2 tay để ghép tim
+          numHands: 2 // Cần 2 tay cho trái tim
         });
         onStatus("REQUESTING CAMERA...");
         if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
@@ -504,36 +521,26 @@ const GestureController = ({ onGesture, onMove, onStatus, debugMode, handRef, on
                 }
             } else if (ctx && !debugMode) ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
 
-            // --- XỬ LÝ CỬ CHỈ (NÂNG CẤP) ---
+            // --- XỬ LÝ CỬ CHỈ ---
             let isHeartFound = false;
 
-            // MỚI: Logic nhận diện 2 tay ghép tim
             if (results.landmarks.length === 2) {
                 const hand1 = results.landmarks[0];
                 const hand2 = results.landmarks[1];
-                
-                // Đầu ngón cái (4) và đầu ngón trỏ (8) của 2 tay
                 const thumb1 = hand1[4]; const index1 = hand1[8];
                 const thumb2 = hand2[4]; const index2 = hand2[8];
-
-                // Tính khoảng cách giữa 2 ngón trỏ và 2 ngón cái
                 const indexDist = Math.hypot(index1.x - index2.x, index1.y - index2.y);
                 const thumbDist = Math.hypot(thumb1.x - thumb2.x, thumb1.y - thumb2.y);
 
-                // HEURISTIC: Nếu 2 đầu ngón trỏ gần nhau VÀ 2 đầu ngón cái gần nhau
                 if (indexDist < 0.08 && thumbDist < 0.08) {
                     isHeartFound = true;
-                    // Khi ghép tim thì tắt chế độ con trỏ 1 tay đi
                     handRef.current.active = false;
                 }
             }
 
-            // Báo cáo trạng thái tim ra ngoài
             onHeartStatus(isHeartFound);
 
-            // Logic 1 tay cũ (Chỉ chạy khi không phải là tim)
             if (!isHeartFound && results.landmarks.length > 0) {
-                // Luôn lấy tay đầu tiên làm con trỏ
                 const lm = results.landmarks[0];
                 const thumb = lm[4]; const index = lm[8];
                 const cursorX = (0.5 - index.x) * 2; 
@@ -573,7 +580,7 @@ const GestureController = ({ onGesture, onMove, onStatus, debugMode, handRef, on
   );
 };
 
-// --- MỚI: COMPONENT NÚT NHẠC ---
+// --- Component: Music Player ---
 const MusicPlayer = () => {
     const audioRef = useRef<HTMLAudioElement>(null);
     const [isPlaying, setIsPlaying] = useState(false);
@@ -612,26 +619,20 @@ export default function GrandTreeApp() {
   const [rotationSpeed, setRotationSpeed] = useState(0);
   const [aiStatus, setAiStatus] = useState("INITIALIZING...");
   const [debugMode, setDebugMode] = useState(false);
-  // MỚI: State quản lý hiển thị tim
   const [showHeart, setShowHeart] = useState(false);
 
   const handRef = useRef({ active: false, x: 0, y: 0, distance: 0 });
 
   return (
     <div style={{ width: '100vw', height: '100vh', backgroundColor: '#000', position: 'relative', overflow: 'hidden' }}>
-      {/* MỚI: Nút nhạc */}
       <MusicPlayer />
-
       <div style={{ width: '100%', height: '100%', position: 'absolute', top: 0, left: 0, zIndex: 1 }}>
         <Canvas dpr={[1, 2]} gl={{ toneMapping: THREE.ReinhardToneMapping }} shadows>
-            {/* Truyền state showHeart xuống Experience */}
             <Experience sceneState={sceneState} rotationSpeed={rotationSpeed} handRef={handRef} showHeart={showHeart} />
         </Canvas>
       </div>
-      {/* Truyền hàm setShowHeart xuống GestureController */}
       <GestureController onGesture={setSceneState} onMove={setRotationSpeed} onStatus={setAiStatus} debugMode={debugMode} handRef={handRef} onHeartStatus={setShowHeart} />
 
-      {/* UI - Stats */}
       <div style={{ position: 'absolute', bottom: '30px', left: '40px', color: '#888', zIndex: 10, fontFamily: 'sans-serif', userSelect: 'none' }}>
         <div style={{ marginBottom: '15px' }}>
           <p style={{ fontSize: '10px', letterSpacing: '2px', textTransform: 'uppercase', marginBottom: '4px' }}>Memories</p>
@@ -647,7 +648,6 @@ export default function GrandTreeApp() {
         </div>
       </div>
 
-      {/* UI - Buttons */}
       <div style={{ position: 'absolute', bottom: '30px', right: '40px', zIndex: 10, display: 'flex', gap: '10px' }}>
         <button onClick={() => setDebugMode(!debugMode)} style={{ padding: '12px 15px', backgroundColor: debugMode ? '#FFD700' : 'rgba(0,0,0,0.5)', border: '1px solid #FFD700', color: debugMode ? '#000' : '#FFD700', fontFamily: 'sans-serif', fontSize: '12px', fontWeight: 'bold', cursor: 'pointer', backdropFilter: 'blur(4px)' }}>
            {debugMode ? 'HIDE DEBUG' : '🛠 DEBUG'}
@@ -657,7 +657,6 @@ export default function GrandTreeApp() {
         </button>
       </div>
 
-      {/* UI - AI Status */}
       <div style={{ position: 'absolute', top: '20px', left: '50%', transform: 'translateX(-50%)', color: aiStatus.includes('ERROR') ? '#FF0000' : 'rgba(255, 215, 0, 0.4)', fontSize: '10px', letterSpacing: '2px', zIndex: 10, background: 'rgba(0,0,0,0.5)', padding: '4px 8px', borderRadius: '4px' }}>
         {aiStatus}
       </div>
