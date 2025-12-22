@@ -1,5 +1,5 @@
 import { useState, useMemo, useRef, useEffect, Suspense } from 'react';
-import { Canvas, useFrame, extend } from '@react-three/fiber';
+import { Canvas, useFrame, extend, useThree } from '@react-three/fiber';
 import {
   OrbitControls,
   Environment,
@@ -16,43 +16,39 @@ import { MathUtils } from 'three';
 import * as random from 'maath/random';
 import { GestureRecognizer, FilesetResolver, DrawingUtils } from "@mediapipe/tasks-vision";
 
-// --- CẤU HÌNH ĐƯỜNG DẪN ẢNH (QUAN TRỌNG: SỬA LỖI 404) ---
-// Sử dụng BASE_URL từ Vite config để tự động thêm /noelchoembe/ vào trước
+// --- CẤU HÌNH ĐƯỜNG DẪN ẢNH ---
 const BASE_URL = import.meta.env.BASE_URL; 
 
 const TOTAL_NUMBERED_PHOTOS = 15;
 
 const bodyPhotoPaths = [
-  `${BASE_URL}photos/top.jpg`, // Sửa: Thêm BASE_URL
-  ...Array.from({ length: TOTAL_NUMBERED_PHOTOS }, (_, i) => `${BASE_URL}photos/${i + 1}.jpg`) // Sửa: Thêm BASE_URL
+  `${BASE_URL}photos/top.jpg`,
+  ...Array.from({ length: TOTAL_NUMBERED_PHOTOS }, (_, i) => `${BASE_URL}photos/${i + 1}.jpg`)
 ];
 
-// --- 视觉配置 ---
+// --- CẤU HÌNH VISUAL ---
 const CONFIG = {
   colors: {
-    emerald: '#004225', // 纯正祖母绿
+    emerald: '#004225',
     gold: '#FFD700',
     silver: '#ECEFF1',
     red: '#D32F2F',
     green: '#2E7D32',
-    white: '#FFFFFF',   // 纯白色
+    white: '#FFFFFF',   
     warmLight: '#FFD54F',
-    lights: ['#FF0000', '#00FF00', '#0000FF', '#FFFF00'], // 彩灯
-    // 拍立得边框颜色池 (复古柔和色系)
+    lights: ['#FF0000', '#00FF00', '#0000FF', '#FFFF00'],
     borders: ['#FFFAF0', '#F0E68C', '#E6E6FA', '#FFB6C1', '#98FB98', '#87CEFA', '#FFDAB9'],
-    // 圣诞元素颜色
     giftColors: ['#D32F2F', '#FFD700', '#1976D2', '#2E7D32'],
     candyColors: ['#FF0000', '#FFFFFF']
   },
   counts: {
     foliage: 15000,
-    ornaments: 300,   // 拍立得照片数量
-    elements: 200,    // 圣诞元素数量
-    lights: 400       // 彩灯数量
+    ornaments: 300,   
+    elements: 200,    
+    lights: 400       
   },
-  tree: { height: 22, radius: 9 }, // 树体尺寸
+  tree: { height: 22, radius: 9 },
   photos: {
-    // top 属性不再需要，因为已经移入 body
     body: bodyPhotoPaths
   }
 };
@@ -127,13 +123,18 @@ const Foliage = ({ state }: { state: 'CHAOS' | 'FORMED' }) => {
 };
 
 // --- Component: Photo Ornaments (Double-Sided Polaroid) ---
-const PhotoOrnaments = ({ state }: { state: 'CHAOS' | 'FORMED' }) => {
+// --- ĐÃ NÂNG CẤP: THÊM LOGIC RAYCASTER VÀ ZOOM ---
+const PhotoOrnaments = ({ state, handRef }: { state: 'CHAOS' | 'FORMED', handRef: any }) => {
   const textures = useTexture(CONFIG.photos.body);
   const count = CONFIG.counts.ornaments;
   const groupRef = useRef<THREE.Group>(null);
+  const { camera, raycaster } = useThree();
 
   const borderGeometry = useMemo(() => new THREE.PlaneGeometry(1.2, 1.5), []);
   const photoGeometry = useMemo(() => new THREE.PlaneGeometry(1, 1), []);
+
+  // Lưu trữ đối tượng đang được chọn
+  const hoveredIndexRef = useRef<number | null>(null);
 
   const data = useMemo(() => {
     return new Array(count).fill(0).map((_, i) => {
@@ -157,7 +158,7 @@ const PhotoOrnaments = ({ state }: { state: 'CHAOS' | 'FORMED' }) => {
       const chaosRotation = new THREE.Euler(Math.random()*Math.PI, Math.random()*Math.PI, Math.random()*Math.PI);
 
       return {
-        chaosPos, targetPos, scale: baseScale, weight,
+        chaosPos, targetPos, baseScale, currentScale: baseScale, weight,
         textureIndex: i % textures.length,
         borderColor,
         currentPos: chaosPos.clone(),
@@ -173,6 +174,31 @@ const PhotoOrnaments = ({ state }: { state: 'CHAOS' | 'FORMED' }) => {
     if (!groupRef.current) return;
     const isFormed = state === 'FORMED';
     const time = stateObj.clock.elapsedTime;
+    
+    // --- RAYCASTING LOGIC ---
+    // Kiểm tra xem tay có đang ở trong màn hình không
+    if (handRef.current.active) {
+        // Cập nhật raycaster dựa trên tọa độ tay (Normalized -1 to 1)
+        raycaster.setFromCamera({ x: handRef.current.x, y: handRef.current.y }, camera);
+        
+        // Kiểm tra va chạm với các bức ảnh
+        const intersects = raycaster.intersectObjects(groupRef.current.children, true);
+        
+        if (intersects.length > 0) {
+            // Tìm group cha của mesh bị va chạm
+            let object = intersects[0].object;
+            while(object.parent && object.parent !== groupRef.current) {
+                object = object.parent;
+            }
+            // Lấy index của object trong group
+            const index = groupRef.current.children.indexOf(object);
+            hoveredIndexRef.current = index;
+        } else {
+            hoveredIndexRef.current = null;
+        }
+    } else {
+        hoveredIndexRef.current = null;
+    }
 
     groupRef.current.children.forEach((group, i) => {
       const objData = data[i];
@@ -180,40 +206,70 @@ const PhotoOrnaments = ({ state }: { state: 'CHAOS' | 'FORMED' }) => {
 
       objData.currentPos.lerp(target, delta * (isFormed ? 0.8 * objData.weight : 0.5));
       group.position.copy(objData.currentPos);
-
-      if (isFormed) {
-         const targetLookPos = new THREE.Vector3(group.position.x * 2, group.position.y + 0.5, group.position.z * 2);
-         group.lookAt(targetLookPos);
-
-         const wobbleX = Math.sin(time * objData.wobbleSpeed + objData.wobbleOffset) * 0.05;
-         const wobbleZ = Math.cos(time * objData.wobbleSpeed * 0.8 + objData.wobbleOffset) * 0.05;
-         group.rotation.x += wobbleX;
-         group.rotation.z += wobbleZ;
+      
+      // --- LOGIC ZOOM ---
+      let targetScale = objData.baseScale;
+      
+      // Nếu ảnh này đang được chọn
+      if (hoveredIndexRef.current === i) {
+          // Highlight (Viền sáng hoặc to ra một chút)
+          targetScale = objData.baseScale * 1.2; 
+          
+          // Nếu đang dùng cử chỉ mở ngón tay -> Zoom to theo khoảng cách
+          if (handRef.current.distance > 0.05) {
+              const zoomFactor = 1 + (handRef.current.distance * 8.0); // Độ nhạy zoom
+              targetScale = Math.min(objData.baseScale * 5.0, objData.baseScale * zoomFactor);
+          }
+          
+          // Luôn quay mặt về camera khi được chọn để xem rõ hơn
+          group.lookAt(camera.position);
 
       } else {
-         group.rotation.x += delta * objData.rotationSpeed.x;
-         group.rotation.y += delta * objData.rotationSpeed.y;
-         group.rotation.z += delta * objData.rotationSpeed.z;
+          // Logic quay bình thường
+          if (isFormed) {
+             const targetLookPos = new THREE.Vector3(group.position.x * 2, group.position.y + 0.5, group.position.z * 2);
+             group.lookAt(targetLookPos);
+
+             const wobbleX = Math.sin(time * objData.wobbleSpeed + objData.wobbleOffset) * 0.05;
+             const wobbleZ = Math.cos(time * objData.wobbleSpeed * 0.8 + objData.wobbleOffset) * 0.05;
+             group.rotation.x += wobbleX;
+             group.rotation.z += wobbleZ;
+          } else {
+             group.rotation.x += delta * objData.rotationSpeed.x;
+             group.rotation.y += delta * objData.rotationSpeed.y;
+             group.rotation.z += delta * objData.rotationSpeed.z;
+          }
       }
+      
+      // Lerp scale để zoom mượt mà
+      const currentScaleVec = group.scale.x; 
+      const newScale = MathUtils.lerp(currentScaleVec, targetScale, delta * 5);
+      group.scale.set(newScale, newScale, newScale);
     });
   });
 
   return (
     <group ref={groupRef}>
       {data.map((obj, i) => (
-        <group key={i} scale={[obj.scale, obj.scale, obj.scale]} rotation={state === 'CHAOS' ? obj.chaosRotation : [0,0,0]}>
+        <group key={i} scale={[obj.baseScale, obj.baseScale, obj.baseScale]} rotation={state === 'CHAOS' ? obj.chaosRotation : [0,0,0]}>
           {/* 正面 */}
           <group position={[0, 0, 0.015]}>
             <mesh geometry={photoGeometry}>
               <meshStandardMaterial
                 map={textures[obj.textureIndex]}
                 roughness={0.5} metalness={0}
-                emissive={CONFIG.colors.white} emissiveMap={textures[obj.textureIndex]} emissiveIntensity={1.0}
+                emissive={CONFIG.colors.white} emissiveMap={textures[obj.textureIndex]} 
+                emissiveIntensity={hoveredIndexRef.current === i ? 1.5 : 1.0} // Sáng hơn khi hover
                 side={THREE.FrontSide}
               />
             </mesh>
             <mesh geometry={borderGeometry} position={[0, -0.15, -0.01]}>
-              <meshStandardMaterial color={obj.borderColor} roughness={0.9} metalness={0} side={THREE.FrontSide} />
+              <meshStandardMaterial 
+                color={hoveredIndexRef.current === i ? '#FFFF00' : obj.borderColor} // Viền vàng khi hover
+                emissive={hoveredIndexRef.current === i ? '#FFFF00' : '#000000'}
+                emissiveIntensity={hoveredIndexRef.current === i ? 0.5 : 0}
+                roughness={0.9} metalness={0} side={THREE.FrontSide} 
+               />
             </mesh>
           </group>
           {/* 背面 */}
@@ -333,7 +389,7 @@ const FairyLights = ({ state }: { state: 'CHAOS' | 'FORMED' }) => {
   );
 };
 
-// --- Component: Top Star (No Photo, Pure Gold 3D Star) ---
+// --- Component: Top Star ---
 const TopStar = ({ state }: { state: 'CHAOS' | 'FORMED' }) => {
   const groupRef = useRef<THREE.Group>(null);
 
@@ -351,18 +407,13 @@ const TopStar = ({ state }: { state: 'CHAOS' | 'FORMED' }) => {
 
   const starGeometry = useMemo(() => {
     return new THREE.ExtrudeGeometry(starShape, {
-      depth: 0.4, // 增加一点厚度
-      bevelEnabled: true, bevelThickness: 0.1, bevelSize: 0.1, bevelSegments: 3,
+      depth: 0.4, bevelEnabled: true, bevelThickness: 0.1, bevelSize: 0.1, bevelSegments: 3,
     });
   }, [starShape]);
 
-  // 纯金材质
   const goldMaterial = useMemo(() => new THREE.MeshStandardMaterial({
-    color: CONFIG.colors.gold,
-    emissive: CONFIG.colors.gold,
-    emissiveIntensity: 1.5, // 适中亮度，既发光又有质感
-    roughness: 0.1,
-    metalness: 1.0,
+    color: CONFIG.colors.gold, emissive: CONFIG.colors.gold, emissiveIntensity: 1.5,
+    roughness: 0.1, metalness: 1.0,
   }), []);
 
   useFrame((_, delta) => {
@@ -382,12 +433,54 @@ const TopStar = ({ state }: { state: 'CHAOS' | 'FORMED' }) => {
   );
 };
 
+// --- NEW COMPONENT: 3D CURSOR (Chấm đỏ theo tay) ---
+const Cursor3D = ({ handRef }: { handRef: any }) => {
+    const meshRef = useRef<THREE.Mesh>(null);
+    const { camera, viewport } = useThree();
+    
+    useFrame(() => {
+        if (meshRef.current) {
+            if (handRef.current.active) {
+                // Chuyển tọa độ Normalize (-1 đến 1) sang tọa độ không gian 3D
+                // Vector3(x, y, z).unproject(camera)
+                const vec = new THREE.Vector3(handRef.current.x, handRef.current.y, 0.5); 
+                vec.unproject(camera);
+                
+                // Tính hướng từ camera đến điểm đó
+                vec.sub(camera.position).normalize();
+                
+                // Đặt cursor ở khoảng cách cố định (ví dụ 40 unit) trước camera
+                const distance = 40;
+                const pos = camera.position.clone().add(vec.multiplyScalar(distance));
+                
+                meshRef.current.position.copy(pos);
+                meshRef.current.visible = true;
+            } else {
+                meshRef.current.visible = false;
+            }
+        }
+    });
+
+    return (
+        <mesh ref={meshRef}>
+            <sphereGeometry args={[0.2, 16, 16]} />
+            <meshBasicMaterial color="red" transparent opacity={0.8} />
+        </mesh>
+    );
+}
+
 // --- Main Scene Experience ---
-const Experience = ({ sceneState, rotationSpeed }: { sceneState: 'CHAOS' | 'FORMED', rotationSpeed: number }) => {
+// Đã thêm handRef để truyền xuống
+const Experience = ({ sceneState, rotationSpeed, handRef }: { sceneState: 'CHAOS' | 'FORMED', rotationSpeed: number, handRef: any }) => {
   const controlsRef = useRef<any>(null);
+  
   useFrame(() => {
     if (controlsRef.current) {
-      controlsRef.current.setAzimuthalAngle(controlsRef.current.getAzimuthalAngle() + rotationSpeed);
+      // Nếu đang dùng tay để zoom ảnh, ta tạm dừng xoay cây để đỡ chóng mặt
+      const isInteracting = handRef.current.active && handRef.current.distance > 0.1;
+      if (!isInteracting) {
+          controlsRef.current.setAzimuthalAngle(controlsRef.current.getAzimuthalAngle() + rotationSpeed);
+      }
       controlsRef.current.update();
     }
   });
@@ -406,10 +499,14 @@ const Experience = ({ sceneState, rotationSpeed }: { sceneState: 'CHAOS' | 'FORM
       <pointLight position={[-30, 10, -30]} intensity={50} color={CONFIG.colors.gold} />
       <pointLight position={[0, -20, 10]} intensity={30} color="#ffffff" />
 
+      {/* Cursor 3D */}
+      <Cursor3D handRef={handRef} />
+
       <group position={[0, -6, 0]}>
         <Foliage state={sceneState} />
         <Suspense fallback={null}>
-           <PhotoOrnaments state={sceneState} />
+           {/* Truyền handRef vào PhotoOrnaments để xử lý zoom */}
+           <PhotoOrnaments state={sceneState} handRef={handRef} />
            <ChristmasElements state={sceneState} />
            <FairyLights state={sceneState} />
            <TopStar state={sceneState} />
@@ -426,8 +523,8 @@ const Experience = ({ sceneState, rotationSpeed }: { sceneState: 'CHAOS' | 'FORM
 };
 
 // --- Gesture Controller ---
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const GestureController = ({ onGesture, onMove, onStatus, debugMode }: any) => {
+// Đã cập nhật để tính toán Pinch Zoom và tọa độ trỏ
+const GestureController = ({ onGesture, onMove, onStatus, debugMode, handRef }: any) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
@@ -453,7 +550,7 @@ const GestureController = ({ onGesture, onMove, onStatus, debugMode }: any) => {
           if (videoRef.current) {
             videoRef.current.srcObject = stream;
             videoRef.current.play();
-            onStatus("AI READY: SHOW HAND");
+            onStatus("AI READY: POINT & PINCH");
             predictWebcam();
           }
         } else {
@@ -469,6 +566,8 @@ const GestureController = ({ onGesture, onMove, onStatus, debugMode }: any) => {
         if (videoRef.current.videoWidth > 0) {
             const results = gestureRecognizer.recognizeForVideo(videoRef.current, Date.now());
             const ctx = canvasRef.current.getContext("2d");
+            
+            // Vẽ debug
             if (ctx && debugMode) {
                 ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
                 canvasRef.current.width = videoRef.current.videoWidth; canvasRef.current.height = videoRef.current.videoHeight;
@@ -479,17 +578,49 @@ const GestureController = ({ onGesture, onMove, onStatus, debugMode }: any) => {
                 }
             } else if (ctx && !debugMode) ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
 
-            if (results.gestures.length > 0) {
-              const name = results.gestures[0][0].categoryName; const score = results.gestures[0][0].score;
-              if (score > 0.4) {
-                 if (name === "Open_Palm") onGesture("CHAOS"); if (name === "Closed_Fist") onGesture("FORMED");
-                 if (debugMode) onStatus(`DETECTED: ${name}`);
-              }
-              if (results.landmarks.length > 0) {
-                const speed = (0.5 - results.landmarks[0][0].x) * 0.15;
-                onMove(Math.abs(speed) > 0.01 ? speed : 0);
-              }
-            } else { onMove(0); if (debugMode) onStatus("AI READY: NO HAND"); }
+            // --- XỬ LÝ CỬ CHỈ ---
+            if (results.landmarks.length > 0) {
+                const lm = results.landmarks[0];
+                const thumb = lm[4];
+                const index = lm[8];
+
+                // 1. Tính toán tọa độ con trỏ (dùng ngón trỏ)
+                // Chuyển đổi sang hệ tọa độ của Three.js (Normalized Device Coordinates)
+                // X: -1 (trái) đến 1 (phải)
+                // Y: 1 (trên) đến -1 (dưới)
+                // Lưu ý: Camera bị ngược gương nên X = (x - 0.5) * 2 chứ không phải (0.5 - x) * 2
+                const cursorX = (0.5 - index.x) * 2; 
+                const cursorY = (0.5 - index.y) * 2;
+
+                // 2. Tính khoảng cách Pinch (Chụm)
+                const distance = Math.sqrt(Math.pow(thumb.x - index.x, 2) + Math.pow(thumb.y - index.y, 2));
+
+                // 3. Cập nhật vào Ref (để Canvas đọc được mà không re-render)
+                handRef.current = {
+                    active: true,
+                    x: cursorX,
+                    y: cursorY,
+                    distance: distance
+                };
+
+                // 4. Logic cũ (Xoay cây)
+                const speed = cursorX * 0.05; 
+                onMove(Math.abs(speed) > 0.005 ? speed : 0);
+
+                // 5. Gestures cơ bản (Open/Close)
+                if (results.gestures.length > 0) {
+                     const name = results.gestures[0][0].categoryName; 
+                     const score = results.gestures[0][0].score;
+                     if (score > 0.5) {
+                        if (name === "Open_Palm") onGesture("CHAOS");
+                        if (name === "Closed_Fist") onGesture("FORMED");
+                     }
+                }
+
+            } else { 
+                handRef.current.active = false;
+                onMove(0); 
+            }
         }
         requestRef = requestAnimationFrame(predictWebcam);
       }
@@ -513,14 +644,17 @@ export default function GrandTreeApp() {
   const [aiStatus, setAiStatus] = useState("INITIALIZING...");
   const [debugMode, setDebugMode] = useState(false);
 
+  // Ref lưu trạng thái tay để truyền xuyên qua Canvas mà không gây re-render
+  const handRef = useRef({ active: false, x: 0, y: 0, distance: 0 });
+
   return (
     <div style={{ width: '100vw', height: '100vh', backgroundColor: '#000', position: 'relative', overflow: 'hidden' }}>
       <div style={{ width: '100%', height: '100%', position: 'absolute', top: 0, left: 0, zIndex: 1 }}>
         <Canvas dpr={[1, 2]} gl={{ toneMapping: THREE.ReinhardToneMapping }} shadows>
-            <Experience sceneState={sceneState} rotationSpeed={rotationSpeed} />
+            <Experience sceneState={sceneState} rotationSpeed={rotationSpeed} handRef={handRef} />
         </Canvas>
       </div>
-      <GestureController onGesture={setSceneState} onMove={setRotationSpeed} onStatus={setAiStatus} debugMode={debugMode} />
+      <GestureController onGesture={setSceneState} onMove={setRotationSpeed} onStatus={setAiStatus} debugMode={debugMode} handRef={handRef} />
 
       {/* UI - Stats */}
       <div style={{ position: 'absolute', bottom: '30px', left: '40px', color: '#888', zIndex: 10, fontFamily: 'sans-serif', userSelect: 'none' }}>
@@ -531,10 +665,10 @@ export default function GrandTreeApp() {
           </p>
         </div>
         <div>
-          <p style={{ fontSize: '10px', letterSpacing: '2px', textTransform: 'uppercase', marginBottom: '4px' }}>Foliage</p>
-          <p style={{ fontSize: '24px', color: '#004225', fontWeight: 'bold', margin: 0 }}>
-            {(CONFIG.counts.foliage / 1000).toFixed(0)}K <span style={{ fontSize: '10px', color: '#555', fontWeight: 'normal' }}>EMERALD NEEDLES</span>
-          </p>
+            <p style={{ color: '#aaa', fontSize: '12px' }}>
+                👉 Point index finger to select photo.<br/>
+                👌 Open thumb & index to Zoom In.
+            </p>
         </div>
       </div>
 
