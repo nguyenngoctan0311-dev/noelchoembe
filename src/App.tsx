@@ -225,7 +225,11 @@ const PhotoOrnaments = ({ state, handRef }: { state: 'CHAOS' | 'FORMED', handRef
 const ChristmasElements = ({ state }: { state: 'CHAOS' | 'FORMED' }) => {
   const count = CONFIG.counts.elements;
   const groupRef = useRef<THREE.Group>(null);
+  
+  // --- ĐÃ FIX LỖI Ở ĐÂY: Sửa 8 thành 0.8 để hộp quà vuông vắn ---
   const boxGeometry = useMemo(() => new THREE.BoxGeometry(0.8, 0.8, 0.8), []);
+  // -------------------------------------------------------------
+  
   const sphereGeometry = useMemo(() => new THREE.SphereGeometry(0.5, 16, 16), []);
   const caneGeometry = useMemo(() => new THREE.CylinderGeometry(0.15, 0.15, 1.2, 8), []);
   const data = useMemo(() => {
@@ -333,7 +337,7 @@ const TopStar = ({ state }: { state: 'CHAOS' | 'FORMED' }) => {
   );
 };
 
-// --- MỚI: COMPONENT TRÁI TIM PIXEL (Dùng Công thức Toán học - Không bao giờ lỗi) ---
+// --- MỚI: COMPONENT TRÁI TIM PIXEL (Dùng Công thức Toán học - Đã sửa lỗi ngược & hình que) ---
 const BigHeart = ({ show }: { show: boolean }) => {
     const pointsRef = useRef<THREE.Points>(null);
     
@@ -344,14 +348,8 @@ const BigHeart = ({ show }: { show: boolean }) => {
 
         for (let i = 0; i < particleCount; i++) {
             // Sử dụng công thức toán học hình trái tim:
-            // x = 16sin^3(t)
-            // y = 13cos(t) - 5cos(2t) - 2cos(3t) - cos(4t)
             const t = Math.random() * Math.PI * 2;
-            
-            // Để điểm nằm bên trong (chứ không chỉ ở viền), nhân với căn bậc 2 của số ngẫu nhiên
             const r = Math.sqrt(Math.random()); 
-            
-            // Scale nhỏ lại (0.25) cho vừa với cây thông
             const scale = 0.25;
 
             const x = r * (16 * Math.pow(Math.sin(t), 3)) * scale;
@@ -373,10 +371,10 @@ const BigHeart = ({ show }: { show: boolean }) => {
     // 3. Material
     const material = useMemo(() => new THREE.PointsMaterial({
         color: "#FF0000",   
-        size: 0.15,         
-        sizeAttenuation: true, 
+        size: 6,            // Kích thước Pixel (đơn vị pixel màn hình)
+        sizeAttenuation: false, // QUAN TRỌNG: Tắt cái này để hạt luôn vuông, không bị méo
         transparent: true,
-        opacity: 0.9,
+        opacity: 1.0,
     }), []);
 
     // 4. Animation
@@ -390,13 +388,14 @@ const BigHeart = ({ show }: { show: boolean }) => {
             pointsRef.current.scale.lerp(new THREE.Vector3(targetScale, targetScale, targetScale), 0.1);
             
             if (show) {
+                // Xoay nhẹ
                 pointsRef.current.rotation.y += 0.005;
             }
         }
     });
 
     return (
-        <group rotation={[Math.PI, 0, 0]} position={[0, 6, 0]}> 
+        <group rotation={[0, 0, 0]} position={[0, 6, 0]}> 
             <points 
                 ref={pointsRef} 
                 geometry={geometry} 
@@ -474,8 +473,6 @@ const Experience = ({ sceneState, rotationSpeed, handRef, showHeart }: { sceneSt
 const GestureController = ({ onGesture, onMove, onStatus, debugMode, handRef, onHeartStatus }: any) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
-
-  
 
   useEffect(() => {
     let gestureRecognizer: GestureRecognizer;
