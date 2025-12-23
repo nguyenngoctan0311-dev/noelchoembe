@@ -19,12 +19,9 @@ import { GestureRecognizer, FilesetResolver, DrawingUtils } from "@mediapipe/tas
 
 // --- CẤU HÌNH ĐƯỜNG DẪN ---
 const BASE_URL = import.meta.env.BASE_URL;
-
-// --- ĐƯỜNG DẪN NHẠC ---
 const MUSIC_PATH = `${BASE_URL}bg-music.mp3`;
 
 const TOTAL_NUMBERED_PHOTOS = 15;
-
 const bodyPhotoPaths = [
   `${BASE_URL}photos/top.jpg`,
   ...Array.from({ length: TOTAL_NUMBERED_PHOTOS }, (_, i) => `${BASE_URL}photos/${i + 1}.jpg`)
@@ -113,7 +110,7 @@ const Foliage = ({ state }: { state: 'CHAOS' | 'FORMED' }) => {
   );
 };
 
-// --- Component: Photo Ornaments ---
+// --- Component: Photo Ornaments (ĐÃ CẬP NHẬT: DI CHUYỂN THEO TAY KHI CHAOS) ---
 const PhotoOrnaments = ({ state, handRef }: { state: 'CHAOS' | 'FORMED', handRef: any }) => {
   const textures = useTexture(CONFIG.photos.body);
   const count = CONFIG.counts.ornaments;
@@ -126,14 +123,18 @@ const PhotoOrnaments = ({ state, handRef }: { state: 'CHAOS' | 'FORMED', handRef
 
   const data = useMemo(() => {
     return new Array(count).fill(0).map((_, i) => {
-      const chaosPos = new THREE.Vector3((Math.random()-0.5)*70, (Math.random()-0.5)*70, (Math.random()-0.5)*70);
+      // Phạm vi chaos 45
+      const chaosPos = new THREE.Vector3((Math.random()-0.5)*45, (Math.random()-0.5)*45, (Math.random()-0.5)*45);
+      
       const h = CONFIG.tree.height; const y = (Math.random() * h) - (h / 2);
       const rBase = CONFIG.tree.radius;
       const currentRadius = (rBase * (1 - (y + (h/2)) / h)) + 0.5;
       const theta = Math.random() * Math.PI * 2;
       const targetPos = new THREE.Vector3(currentRadius * Math.cos(theta), y, currentRadius * Math.sin(theta));
       const isBig = Math.random() < 0.2;
+      
       const baseScale = isBig ? 2.2 : 0.8 + Math.random() * 0.6;
+      
       const weight = 0.8 + Math.random() * 1.2;
       const borderColor = CONFIG.colors.borders[Math.floor(Math.random() * CONFIG.colors.borders.length)];
       return {
@@ -151,6 +152,7 @@ const PhotoOrnaments = ({ state, handRef }: { state: 'CHAOS' | 'FORMED', handRef
     const isFormed = state === 'FORMED';
     const time = stateObj.clock.elapsedTime;
     
+    // --- Raycaster để check hover ---
     if (handRef.current.active) {
         raycaster.setFromCamera({ x: handRef.current.x, y: handRef.current.y }, camera);
         const intersects = raycaster.intersectObjects(groupRef.current.children, true);
@@ -161,12 +163,35 @@ const PhotoOrnaments = ({ state, handRef }: { state: 'CHAOS' | 'FORMED', handRef
         } else { hoveredIndexRef.current = null; }
     } else { hoveredIndexRef.current = null; }
 
+    // --- Tính toán Offset di chuyển theo tay ---
+    let handOffsetX = 0;
+    let handOffsetY = 0;
+    if (!isFormed && handRef.current.active) {
+        // Hệ số 30 giúp chuyển động tay nhỏ nhưng ảnh bay xa
+        handOffsetX = handRef.current.x * 30; 
+        handOffsetY = handRef.current.y * 30;
+    }
+
     groupRef.current.children.forEach((group, i) => {
       const objData = data[i];
-      const target = isFormed ? objData.targetPos : objData.chaosPos;
-      objData.currentPos.lerp(target, delta * (isFormed ? 0.8 * objData.weight : 0.5));
+      
+      // Xác định vị trí đích
+      // Nếu là CHAOS: Vị trí gốc + Offset theo tay (nhân với weight để tạo độ sâu khác nhau)
+      let target;
+      if (isFormed) {
+          target = objData.targetPos;
+      } else {
+          // Clone vị trí chaos gốc để không bị cộng dồn vĩnh viễn
+          target = objData.chaosPos.clone();
+          // Cộng thêm độ lệch theo tay
+          target.x += handOffsetX * (objData.weight * 0.8); // Các vật nặng nhẹ bay tốc độ khác nhau
+          target.y += handOffsetY * (objData.weight * 0.8);
+      }
+
+      objData.currentPos.lerp(target, delta * (isFormed ? 0.8 * objData.weight : 2.0)); // Tăng tốc độ lerp khi chaos để phản hồi nhanh
       group.position.copy(objData.currentPos);
       
+      // Xử lý Scale (Zoom)
       let targetScale = objData.baseScale;
       if (hoveredIndexRef.current === i) {
           targetScale = objData.baseScale * 1.2; 
@@ -181,12 +206,13 @@ const PhotoOrnaments = ({ state, handRef }: { state: 'CHAOS' | 'FORMED', handRef
              group.rotation.x += Math.sin(time * objData.wobbleSpeed + objData.wobbleOffset) * 0.05;
              group.rotation.z += Math.cos(time * objData.wobbleSpeed * 0.8 + objData.wobbleOffset) * 0.05;
           } else {
+             // Khi chaos, xoay nhẹ tự do
              group.rotation.x += delta * objData.rotationSpeed.x;
              group.rotation.y += delta * objData.rotationSpeed.y;
              group.rotation.z += delta * objData.rotationSpeed.z;
           }
       }
-      const newScale = MathUtils.lerp(group.scale.x, targetScale, delta * 5);
+      const newScale = MathUtils.lerp(group.scale.x, targetScale, delta * 6);
       group.scale.set(newScale, newScale, newScale);
     });
   });
@@ -226,10 +252,10 @@ const ChristmasElements = ({ state }: { state: 'CHAOS' | 'FORMED' }) => {
   const count = CONFIG.counts.elements;
   const groupRef = useRef<THREE.Group>(null);
   
-  const boxGeometry = useMemo(() => new THREE.BoxGeometry(0.8, 0.8, 0.8), []);
-  
-  const sphereGeometry = useMemo(() => new THREE.SphereGeometry(0.5, 16, 16), []);
-  const caneGeometry = useMemo(() => new THREE.CylinderGeometry(0.15, 0.15, 1.2, 8), []);
+  const boxGeometry = useMemo(() => new THREE.BoxGeometry(1, 1, 1), []);
+  const sphereGeometry = useMemo(() => new THREE.SphereGeometry(0.6, 16, 16), []);
+  const caneGeometry = useMemo(() => new THREE.CylinderGeometry(0.1, 0.1, 1.2, 8), []);
+
   const data = useMemo(() => {
     return new Array(count).fill(0).map(() => {
       const chaosPos = new THREE.Vector3((Math.random()-0.5)*60, (Math.random()-0.5)*60, (Math.random()-0.5)*60);
@@ -238,13 +264,26 @@ const ChristmasElements = ({ state }: { state: 'CHAOS' | 'FORMED' }) => {
       const theta = Math.random() * Math.PI * 2;
       const targetPos = new THREE.Vector3(currentRadius * Math.cos(theta), y, currentRadius * Math.sin(theta));
       const type = Math.floor(Math.random() * 3);
-      let color; let scale = 1;
-      if (type === 0) { color = CONFIG.colors.giftColors[Math.floor(Math.random() * CONFIG.colors.giftColors.length)]; scale = 0.8 + Math.random() * 0.4; }
-      else if (type === 1) { color = CONFIG.colors.giftColors[Math.floor(Math.random() * CONFIG.colors.giftColors.length)]; scale = 0.6 + Math.random() * 0.4; }
-      else { color = Math.random() > 0.5 ? CONFIG.colors.red : CONFIG.colors.white; scale = 0.7 + Math.random() * 0.3; }
+      let color; 
+      let scale = 1;
+
+      if (type === 0) { 
+          color = CONFIG.colors.giftColors[Math.floor(Math.random() * CONFIG.colors.giftColors.length)]; 
+          scale = 0.25 + Math.random() * 0.2; 
+      }
+      else if (type === 1) { 
+          color = CONFIG.colors.giftColors[Math.floor(Math.random() * CONFIG.colors.giftColors.length)]; 
+          scale = 0.2 + Math.random() * 0.2; 
+      }
+      else { 
+          color = Math.random() > 0.5 ? CONFIG.colors.red : CONFIG.colors.white; 
+          scale = 0.2 + Math.random() * 0.2; 
+      }
+
       return { type, chaosPos, targetPos, color, scale, currentPos: chaosPos.clone(), chaosRotation: new THREE.Euler(Math.random()*Math.PI, Math.random()*Math.PI, Math.random()*Math.PI), rotationSpeed: { x: (Math.random()-0.5)*2.0, y: (Math.random()-0.5)*2.0, z: (Math.random()-0.5)*2.0 } };
     });
   }, []);
+
   useFrame((_, delta) => {
     if (!groupRef.current) return;
     const isFormed = state === 'FORMED';
@@ -256,12 +295,20 @@ const ChristmasElements = ({ state }: { state: 'CHAOS' | 'FORMED' }) => {
       mesh.rotation.x += delta * objData.rotationSpeed.x; mesh.rotation.y += delta * objData.rotationSpeed.y; mesh.rotation.z += delta * objData.rotationSpeed.z;
     });
   });
+
   return (
     <group ref={groupRef}>
       {data.map((obj, i) => {
         let geometry; if (obj.type === 0) geometry = boxGeometry; else if (obj.type === 1) geometry = sphereGeometry; else geometry = caneGeometry;
         return ( <mesh key={i} scale={[obj.scale, obj.scale, obj.scale]} geometry={geometry} rotation={obj.chaosRotation}>
-          <meshStandardMaterial color={obj.color} roughness={0.3} metalness={0.4} emissive={obj.color} emissiveIntensity={0.2} />
+          <meshStandardMaterial 
+            color={obj.color} 
+            roughness={0.2} 
+            metalness={0.8} 
+            emissive={obj.color} 
+            emissiveIntensity={4.0} 
+            toneMapped={false} 
+          />
         </mesh> )})}
     </group>
   );
@@ -304,7 +351,7 @@ const FairyLights = ({ state }: { state: 'CHAOS' | 'FORMED' }) => {
   );
 };
 
-// --- Component: Top Star ---
+// --- Component: Top Star (To 1.3 lần) ---
 const TopStar = ({ state }: { state: 'CHAOS' | 'FORMED' }) => {
   const groupRef = useRef<THREE.Group>(null);
   const starShape = useMemo(() => {
@@ -322,7 +369,10 @@ const TopStar = ({ state }: { state: 'CHAOS' | 'FORMED' }) => {
   useFrame((_, delta) => {
     if (groupRef.current) {
       groupRef.current.rotation.y += delta * 0.5;
-      const targetScale = state === 'FORMED' ? 1 : 0;
+      
+      // Target Scale = 1.3
+      const targetScale = state === 'FORMED' ? 1.3 : 0;
+      
       groupRef.current.scale.lerp(new THREE.Vector3(targetScale, targetScale, targetScale), delta * 3);
     }
   });
@@ -335,75 +385,273 @@ const TopStar = ({ state }: { state: 'CHAOS' | 'FORMED' }) => {
   );
 };
 
-// --- MỚI: COMPONENT TRÁI TIM PIXEL (Dùng Công thức Toán học - Đã sửa lỗi ngược & hình que & KÍCH THƯỚC NHỎ) ---
+// --- COMPONENT TRÁI TIM PIXEL ---
 const BigHeart = ({ show }: { show: boolean }) => {
     const pointsRef = useRef<THREE.Points>(null);
-    
-    // 1. Tạo dữ liệu các điểm (Positions)
     const positions = useMemo(() => {
-        const particleCount = 3000; // Số lượng hạt
-        const pointsData = [];
-
+        const particleCount = 3000; const pointsData = [];
         for (let i = 0; i < particleCount; i++) {
-            // Sử dụng công thức toán học hình trái tim:
             const t = Math.random() * Math.PI * 2;
-            const r = Math.sqrt(Math.random()); 
-            const scale = 0.25;
-
+            const r = Math.sqrt(Math.random()); const scale = 0.25;
             const x = r * (16 * Math.pow(Math.sin(t), 3)) * scale;
             const y = r * (13 * Math.cos(t) - 5 * Math.cos(2*t) - 2 * Math.cos(3*t) - Math.cos(4*t)) * scale;
-            const z = (Math.random() - 0.5) * 2; // Độ dày 3D
-
+            const z = (Math.random() - 0.5) * 2; 
             pointsData.push(x, y, z);
         }
         return new Float32Array(pointsData);
     }, []);
-
-    // 2. Tạo Geometry
     const geometry = useMemo(() => {
         const geo = new THREE.BufferGeometry();
         geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
         return geo;
     }, [positions]);
-
-    // 3. Material
     const material = useMemo(() => new THREE.PointsMaterial({
-        color: "#FF0000",   
-        size: 3,            // <--- ĐÃ GIẢM KÍCH THƯỚC XUỐNG 3 PIXEL
-        sizeAttenuation: false, 
-        transparent: true,
-        opacity: 1.0,
+        color: "#FF0000", size: 3, sizeAttenuation: false, transparent: true, opacity: 1.0,
     }), []);
-
-    // 4. Animation
     useFrame((state) => {
         if (pointsRef.current) { 
             const time = state.clock.elapsedTime;
             const beat = 1 + Math.sin(time * 10) * 0.08; 
-            
             const targetScale = show ? beat * 1.2 : 0; 
-            
             pointsRef.current.scale.lerp(new THREE.Vector3(targetScale, targetScale, targetScale), 0.1);
-            
-            if (show) {
-                // Xoay nhẹ
-                pointsRef.current.rotation.y += 0.005;
-            }
+            if (show) pointsRef.current.rotation.y += 0.005;
         }
     });
-
     return (
         <group rotation={[0, 0, 0]} position={[0, 6, 0]}> 
-            <points 
-                ref={pointsRef} 
-                geometry={geometry} 
-                material={material} 
-                scale={[0, 0, 0]} 
-            />
+            <points ref={pointsRef} geometry={geometry} material={material} scale={[0, 0, 0]} />
             <pointLight position={[0, 0, 2]} intensity={show ? 80 : 0} color="#FF0000" distance={25} decay={2} />
         </group>
     );
 }
+
+// --- MỚI: PHIÊN BẢN VOXEL PORSCHE SANTA & QUÀ ---
+
+const VOXEL_MATS = {
+  brown: new THREE.MeshStandardMaterial({ color: "#5D4037", roughness: 0.8 }), 
+  red: new THREE.MeshStandardMaterial({ color: "#B71C1C", roughness: 0.3, metalness: 0.5 }), 
+  brightRed: new THREE.MeshStandardMaterial({ color: "#D50000", roughness: 0.8 }), 
+  white: new THREE.MeshStandardMaterial({ color: "#ECEFF1", roughness: 0.9 }),
+  gold: new THREE.MeshStandardMaterial({ color: "#FFC107", roughness: 0.3, metalness: 0.8 }), 
+  flesh: new THREE.MeshStandardMaterial({ color: "#FFCCBC", roughness: 0.6 }),
+  black: new THREE.MeshStandardMaterial({ color: "#111111", roughness: 0.7 }),
+  chrome: new THREE.MeshStandardMaterial({ color: "#CCCCCC", metalness: 0.9, roughness: 0.1 }),
+  tire: new THREE.MeshStandardMaterial({ color: "#222222", roughness: 0.9 }),
+  windshield: new THREE.MeshStandardMaterial({ color: "#88CCFF", transparent: true, opacity: 0.6, metalness: 0.9, roughness: 0.1 }),
+  // Thêm màu xanh lá cho hộp quà
+  green: new THREE.MeshStandardMaterial({ color: "#2E7D32", roughness: 0.8 }), 
+};
+
+// Danh sách các cặp màu cho hộp quà
+const GIFT_MATS = [
+    { box: VOXEL_MATS.red, ribbon: VOXEL_MATS.gold },
+    { box: VOXEL_MATS.green, ribbon: VOXEL_MATS.red },
+    { box: VOXEL_MATS.white, ribbon: VOXEL_MATS.red },
+    { box: VOXEL_MATS.gold, ribbon: VOXEL_MATS.white },
+];
+
+// Component Hộp quà Voxel
+const VoxelGift = ({ index }: { index: number }) => {
+  const mat = GIFT_MATS[index % GIFT_MATS.length];
+  return (
+    <group>
+       {/* Hộp chính */}
+       <mesh material={mat.box}> <boxGeometry args={[0.8, 0.8, 0.8]} /> </mesh>
+       {/* Ruy băng ngang */}
+       <mesh material={mat.ribbon}> <boxGeometry args={[0.82, 0.82, 0.2]} /> </mesh>
+       {/* Ruy băng dọc */}
+       <mesh material={mat.ribbon}> <boxGeometry args={[0.2, 0.82, 0.82]} /> </mesh>
+    </group>
+  );
+}
+
+const VoxelPorscheSanta = () => {
+  const wheelGeo = useMemo(() => new THREE.CylinderGeometry(0.6, 0.6, 0.5, 16), []);
+  return (
+    <group>
+      {/* --- THÂN XE PORSCHE --- */}
+      <mesh position={[0, 0.5, 0]} material={VOXEL_MATS.red}> <boxGeometry args={[2.4, 0.7, 5.0]} /> </mesh>
+      <mesh position={[0, 0.6, 2.0]} material={VOXEL_MATS.red} rotation={[Math.PI/32, 0, 0]}> <boxGeometry args={[2.3, 0.5, 1.5]} /> </mesh>
+      <mesh position={[0, 0.6, -2.0]} material={VOXEL_MATS.red}> <boxGeometry args={[2.3, 0.6, 1.2]} /> </mesh>
+      <mesh position={[0, 1.0, -2.4]} material={VOXEL_MATS.red}> <boxGeometry args={[2.2, 0.1, 0.5]} /> </mesh>
+      {/* --- BÁNH XE --- */}
+      <group rotation={[0, 0, Math.PI / 2]}>
+          <mesh position={[0.5, 1.2, 1.6]} geometry={wheelGeo} material={VOXEL_MATS.tire} /> 
+          <mesh position={[0.5, -1.2, 1.6]} geometry={wheelGeo} material={VOXEL_MATS.tire} /> 
+          <mesh position={[0.5, 1.2, -1.8]} geometry={wheelGeo} material={VOXEL_MATS.tire} /> 
+          <mesh position={[0.5, -1.2, -1.8]} geometry={wheelGeo} material={VOXEL_MATS.tire} /> 
+          <mesh position={[0.52, 1.2, 1.6]} material={VOXEL_MATS.chrome}> <cylinderGeometry args={[0.3, 0.3, 0.52, 8]} /> </mesh>
+          <mesh position={[0.52, -1.2, 1.6]} material={VOXEL_MATS.chrome}> <cylinderGeometry args={[0.3, 0.3, 0.52, 8]} /> </mesh>
+          <mesh position={[0.52, 1.2, -1.8]} material={VOXEL_MATS.chrome}> <cylinderGeometry args={[0.3, 0.3, 0.52, 8]} /> </mesh>
+          <mesh position={[0.52, -1.2, -1.8]} material={VOXEL_MATS.chrome}> <cylinderGeometry args={[0.3, 0.3, 0.52, 8]} /> </mesh>
+      </group>
+      {/* --- NỘI THẤT --- */}
+      <mesh position={[0, 0.8, -0.2]} material={VOXEL_MATS.black}> <boxGeometry args={[2.0, 0.4, 2.5]} /> </mesh>
+      <mesh position={[0, 0.8, -0.8]} material={VOXEL_MATS.brown}> <boxGeometry args={[1.5, 0.6, 0.8]} /> </mesh>
+      <mesh position={[0, 1.4, 0.7]} material={VOXEL_MATS.chrome} rotation={[-Math.PI/6, 0, 0]}> <boxGeometry args={[2.1, 0.8, 0.1]} /> </mesh>
+      <mesh position={[0, 1.4, 0.7]} material={VOXEL_MATS.windshield} rotation={[-Math.PI/6, 0, 0]}> <boxGeometry args={[1.9, 0.7, 0.12]} /> </mesh>
+      {/* --- ÔNG GIÀ NOEL --- */}
+      <group position={[0, 1.1, -0.8]}>
+         <mesh position={[0, 0.3, 0]} material={VOXEL_MATS.brightRed}> <boxGeometry args={[0.9, 0.8, 0.7]} /> </mesh>
+         <mesh position={[0, 1.0, 0]} material={VOXEL_MATS.flesh}> <boxGeometry args={[0.6, 0.6, 0.6]} /> </mesh>
+         <mesh position={[0, 0.9, 0.35]} material={VOXEL_MATS.white}> <boxGeometry args={[0.7, 0.5, 0.2]} /> </mesh>
+         <mesh position={[0, 1.4, 0]} material={VOXEL_MATS.brightRed}> <boxGeometry args={[0.7, 0.4, 0.7]} /> </mesh>
+         <mesh position={[0, 1.6, 0.3]} material={VOXEL_MATS.white}> <boxGeometry args={[0.2, 0.2, 0.2]} /> </mesh>
+         <mesh position={[0.3, 0.3, 0.6]} material={VOXEL_MATS.brightRed}> <boxGeometry args={[0.2, 0.2, 0.5]} /> </mesh>
+         <mesh position={[-0.3, 0.3, 0.6]} material={VOXEL_MATS.brightRed}> <boxGeometry args={[0.2, 0.2, 0.5]} /> </mesh>
+         <mesh position={[0, 0.3, 1.0]} material={VOXEL_MATS.black} rotation={[Math.PI/3, 0, 0]}> <torusGeometry args={[0.3, 0.05, 8, 16]} /> </mesh>
+      </group>
+       <mesh position={[0.8, 0.6, 2.7]} material={VOXEL_MATS.gold}> <boxGeometry args={[0.4, 0.2, 0.1]} /> </mesh>
+       <mesh position={[-0.8, 0.6, 2.7]} material={VOXEL_MATS.gold}> <boxGeometry args={[0.4, 0.2, 0.1]} /> </mesh>
+       <mesh position={[0.8, 0.7, -2.6]} material={VOXEL_MATS.brightRed}> <boxGeometry args={[0.4, 0.15, 0.1]} /> </mesh>
+       <mesh position={[-0.8, 0.7, -2.6]} material={VOXEL_MATS.brightRed}> <boxGeometry args={[0.4, 0.15, 0.1]} /> </mesh>
+    </group>
+  );
+};
+
+// Component Bay (ĐÃ FIX VÀ THÊM QUÀ BAY THEO SAU)
+const FlyingSantaVoxel = () => {
+  const groupRef = useRef<THREE.Group>(null);
+  const giftRefs = useRef<(THREE.Group | null)[]>([]);
+
+  const giftsData = useMemo(() => {
+       return new Array(6).fill(0).map((_, i) => ({
+           offset: [
+               (Math.random() - 0.5) * 1.5, 
+               (Math.random() - 0.5) * 1.0 + 0.8, 
+               -3.5 - (i * 1.3) - Math.random() * 0.5 
+           ] as [number, number, number],
+           rotSpeed: [(Math.random()-0.5)*2, (Math.random()-0.5)*2, (Math.random()-0.5)*2],
+           scale: 0.6 + Math.random() * 0.3 
+       }));
+  }, []);
+  
+  useFrame((state, delta) => {
+    if (!groupRef.current) return;
+    const time = state.clock.elapsedTime * 0.1;
+
+    const widthX = 30; 
+    const depthZ = 8; 
+    const x = Math.cos(time) * widthX;
+    const y = 18 + Math.sin(time * 4) * 1.5; 
+    const z = Math.sin(time) * depthZ + 5; 
+
+    groupRef.current.position.set(x, y, z);
+
+    const dx = -widthX * Math.sin(time);
+    const dz = depthZ * Math.cos(time);
+    const angle = Math.atan2(dx, dz);
+    groupRef.current.rotation.set(0, angle, 0); 
+
+    giftRefs.current.forEach((gift, i) => {
+        if(gift) {
+            gift.rotation.x += giftsData[i].rotSpeed[0] * delta;
+            gift.rotation.y += giftsData[i].rotSpeed[1] * delta;
+            gift.rotation.z += giftsData[i].rotSpeed[2] * delta;
+        }
+    });
+  });
+
+  return (
+    <group ref={groupRef}>
+      {/* Tăng kích thước lên 1.2 */}
+      <group scale={[1.2, 1.2, 1.2]}> 
+          <VoxelPorscheSanta />
+          
+          {giftsData.map((data, i) => (
+            <group key={i} position={data.offset} scale={data.scale} ref={el => giftRefs.current[i] = el}>
+                 <VoxelGift index={i} />
+            </group>
+          ))}
+
+          <group position={[0, 0.2, -4.5]}>
+             <Sparkles count={150} scale={10} size={8} speed={1.5} opacity={0.8} color="#FFD700" mixColor="#FF0000" />
+          </group>
+      </group>
+    </group>
+  );
+};
+
+// --- MỚI: HÀM TẠO TEXTURE HÌNH TRÒN MỀM CHO TUYẾT ---
+const createSnowTexture = () => {
+  const canvas = document.createElement('canvas');
+  canvas.width = 64;
+  canvas.height = 64;
+  const context = canvas.getContext('2d');
+
+  if (context) {
+      const gradient = context.createRadialGradient(32, 32, 0, 32, 32, 32);
+      gradient.addColorStop(0, 'rgba(255,255,255,1)'); // Tâm trắng, rõ
+      gradient.addColorStop(1, 'rgba(255,255,255,0)'); // Rìa trong suốt
+
+      context.fillStyle = gradient;
+      context.fillRect(0, 0, 64, 64);
+  }
+
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.needsUpdate = true;
+  return texture;
+};
+
+
+// --- MỚI: COMPONENT HIỆU ỨNG TUYẾT RƠI (BÔNG TUYẾT TRÒN) ---
+const Snow = () => {
+  const count = 2000; 
+  const area = [100, 100, 100]; 
+  const pointsRef = useRef<THREE.Points>(null);
+  
+  // Tạo texture một lần duy nhất
+  const snowTexture = useMemo(() => createSnowTexture(), []);
+
+  const { positions, speeds } = useMemo(() => {
+    const positions = new Float32Array(count * 3);
+    const speeds = new Float32Array(count);
+    for (let i = 0; i < count; i++) {
+      positions[i * 3] = (Math.random() - 0.5) * area[0];     
+      positions[i * 3 + 1] = (Math.random() - 0.5) * area[1]; 
+      positions[i * 3 + 2] = (Math.random() - 0.5) * area[2]; 
+      speeds[i] = 0.5 + Math.random() * 1.5; 
+    }
+    return { positions, speeds };
+  }, []);
+
+  useFrame((state, delta) => {
+    if (!pointsRef.current) return;
+    const positionsArray = pointsRef.current.geometry.attributes.position.array as Float32Array;
+    const bottomY = -area[1] / 2;
+    const topY = area[1] / 2;
+
+    for (let i = 0; i < count; i++) {
+      const i3 = i * 3;
+      positionsArray[i3 + 1] -= speeds[i] * delta * 5; 
+
+      if (positionsArray[i3 + 1] < bottomY) {
+        positionsArray[i3 + 1] = topY;
+        positionsArray[i3] = (Math.random() - 0.5) * area[0];
+        positionsArray[i3 + 2] = (Math.random() - 0.5) * area[2];
+      }
+    }
+    pointsRef.current.geometry.attributes.position.needsUpdate = true;
+  });
+
+  return (
+    <points ref={pointsRef}>
+      <bufferGeometry>
+        <bufferAttribute attach="attributes-position" args={[positions, 3]} count={count} itemSize={3} />
+      </bufferGeometry>
+      <pointsMaterial
+          size={1.2} // Tăng kích thước lên vì dùng texture
+          map={snowTexture} // Áp dụng texture hình tròn
+          color="#FFFFFF"
+          transparent
+          opacity={0.8}
+          depthWrite={false} 
+          blending={THREE.AdditiveBlending} 
+       />
+    </points>
+  );
+};
+
 
 // --- Component: 3D Cursor ---
 const Cursor3D = ({ handRef }: { handRef: any }) => {
@@ -439,13 +687,17 @@ const Experience = ({ sceneState, rotationSpeed, handRef, showHeart }: { sceneSt
     <>
       <PerspectiveCamera makeDefault position={[0, 8, 60]} fov={45} />
       <OrbitControls ref={controlsRef} enablePan={false} enableZoom={true} minDistance={30} maxDistance={120} autoRotate={rotationSpeed === 0 && sceneState === 'FORMED'} autoRotateSpeed={0.3} maxPolarAngle={Math.PI / 1.7} />
-      <color attach="background" args={['#000300']} />
+      <color attach="background" args={['#050505']} />
+      {/* THÊM HIỆU ỨNG TUYẾT RƠI Ở ĐÂY */}
+      <Snow />
       <Stars radius={100} depth={50} count={5000} factor={4} saturation={0} fade speed={1} />
       <Environment preset="night" background={false} />
-      <ambientLight intensity={0.4} color="#003311" />
+      <ambientLight intensity={0.5} color="#404040" />
       <pointLight position={[30, 30, 30]} intensity={100} color={CONFIG.colors.warmLight} />
       <pointLight position={[-30, 10, -30]} intensity={50} color={CONFIG.colors.gold} />
-      <pointLight position={[0, -20, 10]} intensity={30} color="#ffffff" />
+      
+      <directionalLight position={[10, 50, 20]} intensity={2.0} color="#ffffff" castShadow />
+
       <Cursor3D handRef={handRef} />
       <group position={[0, -6, 0]}>
         <Foliage state={sceneState} />
@@ -454,13 +706,14 @@ const Experience = ({ sceneState, rotationSpeed, handRef, showHeart }: { sceneSt
            <ChristmasElements state={sceneState} />
            <FairyLights state={sceneState} />
            <TopStar state={sceneState} />
-           {/* COMPONENT TRÁI TIM MỚI Ở ĐÂY */}
            <BigHeart show={showHeart} />
+           {/* ÔNG GIÀ NOEL LÁI PORSCHE VÀ QUÀ BAY NGANG */}
+           <FlyingSantaVoxel />
         </Suspense>
         <Sparkles count={600} scale={50} size={8} speed={0.4} opacity={0.4} color={CONFIG.colors.silver} />
       </group>
       <EffectComposer>
-        <Bloom luminanceThreshold={0.8} luminanceSmoothing={0.1} intensity={1.5} radius={0.5} mipmapBlur />
+        <Bloom luminanceThreshold={0.5} luminanceSmoothing={0.1} intensity={2.5} radius={0.5} mipmapBlur />
         <Vignette eskil={false} offset={0.1} darkness={1.2} />
       </EffectComposer>
     </>
@@ -486,7 +739,7 @@ const GestureController = ({ onGesture, onMove, onStatus, debugMode, handRef, on
             delegate: "GPU"
           },
           runningMode: "VIDEO",
-          numHands: 2 // Cần 2 tay cho trái tim
+          numHands: 2 
         });
         onStatus("REQUESTING CAMERA...");
         if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
