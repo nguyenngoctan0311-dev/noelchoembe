@@ -17,6 +17,9 @@ import { MathUtils } from 'three';
 import * as random from 'maath/random';
 import { GestureRecognizer, FilesetResolver, DrawingUtils } from "@mediapipe/tasks-vision";
 
+// --- KIỂM TRA THIẾT BỊ (MOBILE/PC) ---
+const isMobile = window.innerWidth < 768;
+
 // --- CẤU HÌNH ĐƯỜNG DẪN ---
 const BASE_URL = import.meta.env.BASE_URL;
 const MUSIC_PATH = `${BASE_URL}bg-music.mp3`;
@@ -27,7 +30,7 @@ const bodyPhotoPaths = [
   ...Array.from({ length: TOTAL_NUMBERED_PHOTOS }, (_, i) => `${BASE_URL}photos/${i + 1}.jpg`)
 ];
 
-// --- CẤU HÌNH VISUAL ---
+// --- CẤU HÌNH VISUAL (TỐI ƯU CHO MOBILE) ---
 const CONFIG = {
   colors: {
     emerald: '#004225', gold: '#FFD700', silver: '#ECEFF1', red: '#D32F2F',
@@ -36,7 +39,14 @@ const CONFIG = {
     borders: ['#FFFAF0', '#F0E68C', '#E6E6FA', '#FFB6C1', '#98FB98', '#87CEFA', '#FFDAB9'],
     giftColors: ['#D32F2F', '#FFD700', '#1976D2', '#2E7D32'],
   },
-  counts: { foliage: 15000, ornaments: 300, elements: 200, lights: 400 },
+  // Giảm số lượng hạt trên mobile để giảm tải CPU/GPU
+  counts: { 
+    foliage: isMobile ? 6000 : 15000, 
+    ornaments: 300, 
+    elements: isMobile ? 100 : 200, 
+    lights: isMobile ? 200 : 400,
+    snow: isMobile ? 600 : 2000 // Giảm tuyết trên mobile
+  },
   tree: { height: 22, radius: 9 },
   photos: { body: bodyPhotoPaths }
 };
@@ -110,7 +120,7 @@ const Foliage = ({ state }: { state: 'CHAOS' | 'FORMED' }) => {
   );
 };
 
-// --- Component: Photo Ornaments (ĐÃ CẬP NHẬT: DI CHUYỂN THEO TAY KHI CHAOS) ---
+// --- Component: Photo Ornaments ---
 const PhotoOrnaments = ({ state, handRef }: { state: 'CHAOS' | 'FORMED', handRef: any }) => {
   const textures = useTexture(CONFIG.photos.body);
   const count = CONFIG.counts.ornaments;
@@ -123,18 +133,14 @@ const PhotoOrnaments = ({ state, handRef }: { state: 'CHAOS' | 'FORMED', handRef
 
   const data = useMemo(() => {
     return new Array(count).fill(0).map((_, i) => {
-      // Phạm vi chaos 45
       const chaosPos = new THREE.Vector3((Math.random()-0.5)*45, (Math.random()-0.5)*45, (Math.random()-0.5)*45);
-      
       const h = CONFIG.tree.height; const y = (Math.random() * h) - (h / 2);
       const rBase = CONFIG.tree.radius;
       const currentRadius = (rBase * (1 - (y + (h/2)) / h)) + 0.5;
       const theta = Math.random() * Math.PI * 2;
       const targetPos = new THREE.Vector3(currentRadius * Math.cos(theta), y, currentRadius * Math.sin(theta));
       const isBig = Math.random() < 0.2;
-      
       const baseScale = isBig ? 2.2 : 0.8 + Math.random() * 0.6;
-      
       const weight = 0.8 + Math.random() * 1.2;
       const borderColor = CONFIG.colors.borders[Math.floor(Math.random() * CONFIG.colors.borders.length)];
       return {
@@ -152,7 +158,6 @@ const PhotoOrnaments = ({ state, handRef }: { state: 'CHAOS' | 'FORMED', handRef
     const isFormed = state === 'FORMED';
     const time = stateObj.clock.elapsedTime;
     
-    // --- Raycaster để check hover ---
     if (handRef.current.active) {
         raycaster.setFromCamera({ x: handRef.current.x, y: handRef.current.y }, camera);
         const intersects = raycaster.intersectObjects(groupRef.current.children, true);
@@ -163,35 +168,28 @@ const PhotoOrnaments = ({ state, handRef }: { state: 'CHAOS' | 'FORMED', handRef
         } else { hoveredIndexRef.current = null; }
     } else { hoveredIndexRef.current = null; }
 
-    // --- Tính toán Offset di chuyển theo tay ---
+    // Di chuyển theo tay
     let handOffsetX = 0;
     let handOffsetY = 0;
     if (!isFormed && handRef.current.active) {
-        // Hệ số 30 giúp chuyển động tay nhỏ nhưng ảnh bay xa
         handOffsetX = handRef.current.x * 30; 
         handOffsetY = handRef.current.y * 30;
     }
 
     groupRef.current.children.forEach((group, i) => {
       const objData = data[i];
-      
-      // Xác định vị trí đích
-      // Nếu là CHAOS: Vị trí gốc + Offset theo tay (nhân với weight để tạo độ sâu khác nhau)
       let target;
       if (isFormed) {
           target = objData.targetPos;
       } else {
-          // Clone vị trí chaos gốc để không bị cộng dồn vĩnh viễn
           target = objData.chaosPos.clone();
-          // Cộng thêm độ lệch theo tay
-          target.x += handOffsetX * (objData.weight * 0.8); // Các vật nặng nhẹ bay tốc độ khác nhau
+          target.x += handOffsetX * (objData.weight * 0.8);
           target.y += handOffsetY * (objData.weight * 0.8);
       }
 
-      objData.currentPos.lerp(target, delta * (isFormed ? 0.8 * objData.weight : 2.0)); // Tăng tốc độ lerp khi chaos để phản hồi nhanh
+      objData.currentPos.lerp(target, delta * (isFormed ? 0.8 * objData.weight : 2.0));
       group.position.copy(objData.currentPos);
       
-      // Xử lý Scale (Zoom)
       let targetScale = objData.baseScale;
       if (hoveredIndexRef.current === i) {
           targetScale = objData.baseScale * 1.2; 
@@ -206,7 +204,6 @@ const PhotoOrnaments = ({ state, handRef }: { state: 'CHAOS' | 'FORMED', handRef
              group.rotation.x += Math.sin(time * objData.wobbleSpeed + objData.wobbleOffset) * 0.05;
              group.rotation.z += Math.cos(time * objData.wobbleSpeed * 0.8 + objData.wobbleOffset) * 0.05;
           } else {
-             // Khi chaos, xoay nhẹ tự do
              group.rotation.x += delta * objData.rotationSpeed.x;
              group.rotation.y += delta * objData.rotationSpeed.y;
              group.rotation.z += delta * objData.rotationSpeed.z;
@@ -351,7 +348,7 @@ const FairyLights = ({ state }: { state: 'CHAOS' | 'FORMED' }) => {
   );
 };
 
-// --- Component: Top Star (To 1.3 lần) ---
+// --- Component: Top Star ---
 const TopStar = ({ state }: { state: 'CHAOS' | 'FORMED' }) => {
   const groupRef = useRef<THREE.Group>(null);
   const starShape = useMemo(() => {
@@ -369,10 +366,7 @@ const TopStar = ({ state }: { state: 'CHAOS' | 'FORMED' }) => {
   useFrame((_, delta) => {
     if (groupRef.current) {
       groupRef.current.rotation.y += delta * 0.5;
-      
-      // Target Scale = 1.3
       const targetScale = state === 'FORMED' ? 1.3 : 0;
-      
       groupRef.current.scale.lerp(new THREE.Vector3(targetScale, targetScale, targetScale), delta * 3);
     }
   });
@@ -596,7 +590,7 @@ const createSnowTexture = () => {
 
 // --- MỚI: COMPONENT HIỆU ỨNG TUYẾT RƠI (BÔNG TUYẾT TRÒN) ---
 const Snow = () => {
-  const count = 2000; 
+  const count = CONFIG.counts.snow; // Sử dụng số lượng tối ưu
   const area = [100, 100, 100]; 
   const pointsRef = useRef<THREE.Points>(null);
   
@@ -613,7 +607,7 @@ const Snow = () => {
       speeds[i] = 0.5 + Math.random() * 1.5; 
     }
     return { positions, speeds };
-  }, []);
+  }, [count]);
 
   useFrame((state, delta) => {
     if (!pointsRef.current) return;
@@ -696,7 +690,8 @@ const Experience = ({ sceneState, rotationSpeed, handRef, showHeart }: { sceneSt
       <pointLight position={[30, 30, 30]} intensity={100} color={CONFIG.colors.warmLight} />
       <pointLight position={[-30, 10, -30]} intensity={50} color={CONFIG.colors.gold} />
       
-      <directionalLight position={[10, 50, 20]} intensity={2.0} color="#ffffff" castShadow />
+      {/* Chỉ render bóng đổ khi không phải mobile */}
+      <directionalLight position={[10, 50, 20]} intensity={2.0} color="#ffffff" castShadow={!isMobile} />
 
       <Cursor3D handRef={handRef} />
       <group position={[0, -6, 0]}>
@@ -712,7 +707,7 @@ const Experience = ({ sceneState, rotationSpeed, handRef, showHeart }: { sceneSt
         </Suspense>
         <Sparkles count={600} scale={50} size={8} speed={0.4} opacity={0.4} color={CONFIG.colors.silver} />
       </group>
-      <EffectComposer>
+      <EffectComposer multisampling={isMobile ? 0 : 8}>
         <Bloom luminanceThreshold={0.5} luminanceSmoothing={0.1} intensity={2.5} radius={0.5} mipmapBlur />
         <Vignette eskil={false} offset={0.1} darkness={1.2} />
       </EffectComposer>
@@ -875,7 +870,7 @@ export default function GrandTreeApp() {
     <div style={{ width: '100vw', height: '100vh', backgroundColor: '#000', position: 'relative', overflow: 'hidden' }}>
       <MusicPlayer />
       <div style={{ width: '100%', height: '100%', position: 'absolute', top: 0, left: 0, zIndex: 1 }}>
-        <Canvas dpr={[1, 2]} gl={{ toneMapping: THREE.ReinhardToneMapping }} shadows>
+        <Canvas dpr={[1, isMobile ? 1.5 : 2]} gl={{ toneMapping: THREE.ReinhardToneMapping }} shadows={!isMobile}>
             <Experience sceneState={sceneState} rotationSpeed={rotationSpeed} handRef={handRef} showHeart={showHeart} />
         </Canvas>
       </div>
