@@ -120,7 +120,7 @@ const Foliage = ({ state }: { state: 'CHAOS' | 'FORMED' }) => {
   );
 };
 
-// --- Component: Photo Ornaments (ĐÃ SỬA: CHỈ CHỌN ẢNH KHI CHAOS) ---
+// --- Component: Photo Ornaments (CHỈ CHỌN ẢNH KHI CHAOS) ---
 const PhotoOrnaments = ({ state, handRef }: { state: 'CHAOS' | 'FORMED', handRef: any }) => {
   const textures = useTexture(CONFIG.photos.body);
   const count = CONFIG.counts.ornaments;
@@ -159,7 +159,7 @@ const PhotoOrnaments = ({ state, handRef }: { state: 'CHAOS' | 'FORMED', handRef
     const isFormed = state === 'FORMED';
     const time = stateObj.clock.elapsedTime;
     
-    // --- SỬA Ở ĐÂY: Chỉ cho phép raycasting (chọn ảnh) khi state là CHAOS ---
+    // --- CHỈ RAYCAST (CHỌN ẢNH) KHI CHAOS ---
     if (handRef.current.active && state === 'CHAOS') {
         raycaster.setFromCamera({ x: handRef.current.x, y: handRef.current.y }, camera);
         const intersects = raycaster.intersectObjects(groupRef.current.children, true);
@@ -168,14 +168,10 @@ const PhotoOrnaments = ({ state, handRef }: { state: 'CHAOS' | 'FORMED', handRef
             while(object.parent && object.parent !== groupRef.current) { object = object.parent; }
             hoveredIndexRef.current = groupRef.current.children.indexOf(object);
         } else { hoveredIndexRef.current = null; }
-    } else { 
-        // Nếu tay không hoạt động HOẶC đang ở dạng cây (FORMED), reset việc chọn
-        hoveredIndexRef.current = null; 
-    }
+    } else { hoveredIndexRef.current = null; }
 
     let handOffsetX = 0;
     let handOffsetY = 0;
-    // Chỉ tính offset di chuyển khi ở dạng CHAOS
     if (!isFormed && handRef.current.active) {
         handOffsetX = handRef.current.x * 30; 
         handOffsetY = handRef.current.y * 30;
@@ -196,7 +192,6 @@ const PhotoOrnaments = ({ state, handRef }: { state: 'CHAOS' | 'FORMED', handRef
       group.position.copy(objData.currentPos);
       
       let targetScale = objData.baseScale;
-      // hoveredIndexRef.current sẽ luôn là null nếu ở dạng FORMED, nên ảnh sẽ không bao giờ zoom/sáng lên
       if (hoveredIndexRef.current === i) {
           const hoverZoomBase = objData.baseScale * 2.5;
           targetScale = hoverZoomBase;
@@ -236,7 +231,6 @@ const PhotoOrnaments = ({ state, handRef }: { state: 'CHAOS' | 'FORMED', handRef
                 metalness={0}
                 emissive={CONFIG.colors.neutralGray} 
                 emissiveMap={textures[obj.textureIndex]} 
-                // Emissive intensity chỉ tăng khi được hover (mà hover chỉ xảy ra khi CHAOS)
                 emissiveIntensity={hoveredIndexRef.current === i ? 0.4 : 0.1} 
                 side={THREE.FrontSide} 
               />
@@ -691,21 +685,51 @@ const Cursor3D = ({ handRef, sceneState }: { handRef: any, sceneState: 'CHAOS' |
 }
 
 // --- Main Scene Experience ---
-const Experience = ({ sceneState, rotationSpeed, handRef, showHeart }: { sceneState: 'CHAOS' | 'FORMED', rotationSpeed: number, handRef: any, showHeart: boolean }) => {
+const Experience = ({ sceneState, cameraMovement, handRef, showHeart }: { sceneState: 'CHAOS' | 'FORMED', cameraMovement: {x: number, y: number}, handRef: any, showHeart: boolean }) => {
   const controlsRef = useRef<any>(null);
+  
   useFrame(() => {
     if (controlsRef.current) {
-      const isInteracting = handRef.current.active && handRef.current.distance > 0.1;
-      if (!isInteracting) { controlsRef.current.setAzimuthalAngle(controlsRef.current.getAzimuthalAngle() + rotationSpeed); }
+      // Logic xoay camera (Luôn hoạt động nếu có cameraMovement)
+      const isInteracting = handRef.current.active; // Bỏ check distance để nhạy hơn cho việc xoay
+
+      if (isInteracting) {
+          // Xoay ngang (Trái/Phải)
+          const currentAzimuth = controlsRef.current.getAzimuthalAngle();
+          controlsRef.current.setAzimuthalAngle(currentAzimuth + cameraMovement.x);
+
+          // Xoay dọc (Trên/Dưới) - Mới thêm
+          const currentPolar = controlsRef.current.getPolarAngle();
+          // Thêm cameraMovement.y vào góc hiện tại
+          const newPolar = currentPolar + cameraMovement.y;
+          
+          // Giới hạn góc nhìn để không bị lộn ngược (0.5 đến 2.5 radian)
+          // 0 = nhìn từ đỉnh xuống, PI = nhìn từ dưới lên
+          if (newPolar > 0.5 && newPolar < 2.5) {
+              controlsRef.current.setPolarAngle(newPolar);
+          }
+      } else if (sceneState === 'FORMED') {
+          // Tự động xoay nhẹ khi ở dạng cây và không có tương tác tay
+          controlsRef.current.setAzimuthalAngle(controlsRef.current.getAzimuthalAngle() + 0.002);
+      }
+
       controlsRef.current.update();
     }
   });
+
   return (
     <>
       <PerspectiveCamera makeDefault position={[0, 8, 60]} fov={45} />
-      <OrbitControls ref={controlsRef} enablePan={false} enableZoom={true} minDistance={30} maxDistance={120} autoRotate={rotationSpeed === 0 && sceneState === 'FORMED'} autoRotateSpeed={0.3} maxPolarAngle={Math.PI / 1.7} />
+      <OrbitControls 
+        ref={controlsRef} 
+        enablePan={false} 
+        enableZoom={true} 
+        minDistance={30} 
+        maxDistance={120} 
+        autoRotate={false} // Tắt autoRotate mặc định để dùng logic custom ở trên
+        maxPolarAngle={Math.PI / 1.5} 
+      />
       <color attach="background" args={['#050505']} />
-      {/* THÊM HIỆU ỨNG TUYẾT RƠI Ở ĐÂY */}
       <Snow />
       <Stars radius={100} depth={50} count={5000} factor={4} saturation={0} fade speed={1} />
       <Environment preset="night" background={false} />
@@ -713,10 +737,8 @@ const Experience = ({ sceneState, rotationSpeed, handRef, showHeart }: { sceneSt
       <pointLight position={[30, 30, 30]} intensity={100} color={CONFIG.colors.warmLight} />
       <pointLight position={[-30, 10, -30]} intensity={50} color={CONFIG.colors.gold} />
       
-      {/* Chỉ render bóng đổ khi không phải mobile */}
       <directionalLight position={[10, 50, 20]} intensity={2.0} color="#ffffff" castShadow={!isMobile} />
 
-      {/* Truyền sceneState vào Cursor3D */}
       <Cursor3D handRef={handRef} sceneState={sceneState} />
       <group position={[0, -6, 0]}>
         <Foliage state={sceneState} />
@@ -726,7 +748,6 @@ const Experience = ({ sceneState, rotationSpeed, handRef, showHeart }: { sceneSt
            <FairyLights state={sceneState} />
            <TopStar state={sceneState} />
            <BigHeart show={showHeart} />
-           {/* ÔNG GIÀ NOEL LÁI PORSCHE VÀ QUÀ BAY NGANG */}
            <FlyingSantaVoxel />
         </Suspense>
         <Sparkles count={600} scale={50} size={8} speed={0.4} opacity={0.4} color={CONFIG.colors.silver} />
@@ -766,7 +787,7 @@ const GestureController = ({ onGesture, onMove, onStatus, debugMode, handRef, on
           if (videoRef.current) {
             videoRef.current.srcObject = stream;
             videoRef.current.play();
-            onStatus("AI READY: 1 HAND=ZOOM | 2 HANDS=HEART");
+            onStatus("AI READY: 1 HAND=ROTATE | 2 HANDS=HEART");
             predictWebcam();
           }
         } else { onStatus("ERROR: CAMERA PERMISSION DENIED"); }
@@ -810,14 +831,24 @@ const GestureController = ({ onGesture, onMove, onStatus, debugMode, handRef, on
             if (!isHeartFound && results.landmarks.length > 0) {
                 const lm = results.landmarks[0];
                 const thumb = lm[4]; const index = lm[8];
+                
+                // Cursor X, Y (-1 đến 1)
                 const cursorX = (0.5 - index.x) * 2; 
                 const cursorY = (0.5 - index.y) * 2;
+
                 const distance = Math.sqrt(Math.pow(thumb.x - index.x, 2) + Math.pow(thumb.y - index.y, 2));
 
                 handRef.current = { active: true, x: cursorX, y: cursorY, distance: distance };
 
-                const speed = cursorX * 0.05; 
-                onMove(Math.abs(speed) > 0.005 ? speed : 0);
+                // Tính tốc độ xoay X và Y
+                const deadzone = 0.1;
+                let speedX = 0;
+                let speedY = 0;
+
+                if (Math.abs(cursorX) > deadzone) speedX = cursorX * 0.03;
+                if (Math.abs(cursorY) > deadzone) speedY = cursorY * 0.03;
+
+                onMove({ x: speedX, y: speedY });
 
                 if (results.gestures.length > 0 && results.gestures[0].length > 0) {
                      const name = results.gestures[0][0].categoryName; 
@@ -829,7 +860,7 @@ const GestureController = ({ onGesture, onMove, onStatus, debugMode, handRef, on
                 }
             } else if (!isHeartFound) { 
                 handRef.current.active = false;
-                onMove(0); 
+                onMove({ x: 0, y: 0 }); 
             }
         }
         requestRef = requestAnimationFrame(predictWebcam);
@@ -883,7 +914,8 @@ const MusicPlayer = () => {
 // --- App Entry ---
 export default function GrandTreeApp() {
   const [sceneState, setSceneState] = useState<'CHAOS' | 'FORMED'>('CHAOS');
-  const [rotationSpeed, setRotationSpeed] = useState(0);
+  // State cameraMovement chứa cả X và Y
+  const [cameraMovement, setCameraMovement] = useState({ x: 0, y: 0 });
   const [aiStatus, setAiStatus] = useState("INITIALIZING...");
   const [debugMode, setDebugMode] = useState(false);
   const [showHeart, setShowHeart] = useState(false);
@@ -895,10 +927,10 @@ export default function GrandTreeApp() {
       <MusicPlayer />
       <div style={{ width: '100%', height: '100%', position: 'absolute', top: 0, left: 0, zIndex: 1 }}>
         <Canvas dpr={[1, isMobile ? 1.5 : 2]} gl={{ toneMapping: THREE.ReinhardToneMapping }} shadows={!isMobile}>
-            <Experience sceneState={sceneState} rotationSpeed={rotationSpeed} handRef={handRef} showHeart={showHeart} />
+            <Experience sceneState={sceneState} cameraMovement={cameraMovement} handRef={handRef} showHeart={showHeart} />
         </Canvas>
       </div>
-      <GestureController onGesture={setSceneState} onMove={setRotationSpeed} onStatus={setAiStatus} debugMode={debugMode} handRef={handRef} onHeartStatus={setShowHeart} />
+      <GestureController onGesture={setSceneState} onMove={setCameraMovement} onStatus={setAiStatus} debugMode={debugMode} handRef={handRef} onHeartStatus={setShowHeart} />
 
       <div style={{ position: 'absolute', bottom: '30px', left: '40px', color: '#888', zIndex: 10, fontFamily: 'sans-serif', userSelect: 'none' }}>
         <div style={{ marginBottom: '15px' }}>
@@ -909,7 +941,7 @@ export default function GrandTreeApp() {
         </div>
         <div>
             <p style={{ color: '#aaa', fontSize: '12px', lineHeight: '1.5' }}>
-                👉 Point 1 finger to select & zoom photo.<br/>
+                👉 Move hand to Rotate Tree (Left/Right/Up/Down).<br/>
                 🫶 <b>Make a HEART with 2 hands!</b>
             </p>
         </div>
