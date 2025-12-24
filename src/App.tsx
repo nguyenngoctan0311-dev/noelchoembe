@@ -18,7 +18,8 @@ import * as random from 'maath/random';
 import { GestureRecognizer, FilesetResolver, DrawingUtils } from "@mediapipe/tasks-vision";
 
 // --- KIỂM TRA THIẾT BỊ (MOBILE/PC) ---
-const isMobile = window.innerWidth < 768;
+// iPad cũng được tính là mobile để tối ưu
+const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || window.innerWidth < 1024;
 
 // --- CẤU HÌNH ĐƯỜNG DẪN ---
 const BASE_URL = import.meta.env.BASE_URL;
@@ -30,7 +31,7 @@ const bodyPhotoPaths = [
   ...Array.from({ length: TOTAL_NUMBERED_PHOTOS }, (_, i) => `${BASE_URL}photos/${i + 1}.jpg`)
 ];
 
-// --- CẤU HÌNH VISUAL ---
+// --- CẤU HÌNH VISUAL (SIÊU TỐI ƯU CHO MOBILE) ---
 const CONFIG = {
   colors: {
     emerald: '#004225', gold: '#FFD700', silver: '#ECEFF1', red: '#D32F2F',
@@ -40,12 +41,13 @@ const CONFIG = {
     giftColors: ['#D32F2F', '#FFD700', '#1976D2', '#2E7D32'],
     neutralGray: '#666666',
   },
+  // Cắt giảm mạnh số lượng hạt trên mobile
   counts: { 
-    foliage: isMobile ? 6000 : 15000, 
-    ornaments: 300, 
-    elements: isMobile ? 100 : 200, 
-    lights: isMobile ? 200 : 400,
-    snow: isMobile ? 600 : 2000 
+    foliage: isMobile ? 3000 : 15000, // Giảm 5 lần
+    ornaments: isMobile ? 150 : 300,  // Giảm một nửa số ảnh ảo
+    elements: isMobile ? 50 : 200,    // Giảm 4 lần
+    lights: isMobile ? 100 : 400,     // Giảm 4 lần
+    snow: isMobile ? 300 : 2000       // Giảm gần 7 lần
   },
   tree: { height: 22, radius: 9 },
   photos: { body: bodyPhotoPaths }
@@ -59,6 +61,7 @@ const FoliageMaterial = shaderMaterial(
   float cubicInOut(float t) { return t < 0.5 ? 4.0 * t * t * t : 0.5 * pow(2.0 * t - 2.0, 3.0) + 1.0; }
   void main() {
     vUv = uv;
+    // Giảm bớt tính toán noise trên mobile nếu cần, nhưng shader này khá nhẹ
     vec3 noise = vec3(sin(uTime * 1.5 + position.x), cos(uTime + position.y), sin(uTime * 1.5 + position.z)) * 0.15;
     float t = cubicInOut(uProgress);
     vec3 finalPos = mix(position, aTargetPos + noise, t);
@@ -159,7 +162,6 @@ const PhotoOrnaments = ({ state, handRef }: { state: 'CHAOS' | 'FORMED', handRef
     const isFormed = state === 'FORMED';
     const time = stateObj.clock.elapsedTime;
     
-    // CHỈ CHỌN ẢNH KHI BUNG (CHAOS)
     if (handRef.current.active && state === 'CHAOS') {
         raycaster.setFromCamera({ x: handRef.current.x, y: handRef.current.y }, camera);
         const intersects = raycaster.intersectObjects(groupRef.current.children, true);
@@ -201,14 +203,18 @@ const PhotoOrnaments = ({ state, handRef }: { state: 'CHAOS' | 'FORMED', handRef
           }
           group.lookAt(camera.position);
       } else {
-          if (isFormed) {
+          // Tối ưu: Không tính toán sin/cos cho từng object trên mobile khi đang tĩnh
+          if (isFormed && !isMobile) {
              group.lookAt(new THREE.Vector3(group.position.x * 2, group.position.y + 0.5, group.position.z * 2));
              group.rotation.x += Math.sin(time * objData.wobbleSpeed + objData.wobbleOffset) * 0.05;
              group.rotation.z += Math.cos(time * objData.wobbleSpeed * 0.8 + objData.wobbleOffset) * 0.05;
-          } else {
+          } else if (!isFormed) {
              group.rotation.x += delta * objData.rotationSpeed.x;
              group.rotation.y += delta * objData.rotationSpeed.y;
              group.rotation.z += delta * objData.rotationSpeed.z;
+          } else if (isMobile) {
+             // Mobile: Chỉ lookAt 1 lần hoặc đơn giản hóa
+             group.lookAt(new THREE.Vector3(group.position.x * 2, group.position.y + 0.5, group.position.z * 2));
           }
       }
       const newScale = MathUtils.lerp(group.scale.x, targetScale, delta * 6);
@@ -216,6 +222,7 @@ const PhotoOrnaments = ({ state, handRef }: { state: 'CHAOS' | 'FORMED', handRef
     });
   });
 
+  // Tắt bóng đổ (castShadow/receiveShadow) trên mobile để tăng tốc
   return (
     <group ref={groupRef}>
       {data.map((obj, i) => (
@@ -352,6 +359,7 @@ const FairyLights = ({ state }: { state: 'CHAOS' | 'FORMED' }) => {
       objData.currentPos.lerp(target, delta * 2.0);
       const mesh = child as THREE.Mesh; mesh.position.copy(objData.currentPos);
       const intensity = (Math.sin(time * objData.speed + objData.timeOffset) + 1) / 2;
+      // Tắt hoàn toàn emissive trên mobile nếu quá nặng, hoặc giữ thấp
       if (mesh.material) { (mesh.material as THREE.MeshStandardMaterial).emissiveIntensity = isFormed ? 3 + intensity * 4 : 0; }
     });
   });
@@ -635,6 +643,7 @@ const Cursor3D = ({ handRef, sceneState }: { handRef: any, sceneState: 'CHAOS' |
     const { camera } = useThree();
     useFrame(() => {
         if (meshRef.current) {
+            // Chỉ hiện khi tay hoạt động VÀ đang ở trạng thái CHAOS
             if (handRef.current.active && sceneState === 'CHAOS') {
                 const vec = new THREE.Vector3(handRef.current.x, handRef.current.y, 0.5); 
                 vec.unproject(camera);
@@ -649,22 +658,22 @@ const Cursor3D = ({ handRef, sceneState }: { handRef: any, sceneState: 'CHAOS' |
     return ( <mesh ref={meshRef}> <sphereGeometry args={[0.2, 16, 16]} /> <meshBasicMaterial color="red" transparent opacity={0.8} /> </mesh> );
 }
 
-// --- Main Scene Experience (ĐÃ SỬA: XOAY DỌC HỢP LÝ & NHẠY HƠN) ---
+// --- Main Scene Experience (ĐÃ SỬA: XOAY MỌI LÚC, TĂNG ĐỘ NHẠY) ---
 const Experience = ({ sceneState, cameraMovement, handRef, showHeart }: { sceneState: 'CHAOS' | 'FORMED', cameraMovement: {x: number, y: number}, handRef: any, showHeart: boolean }) => {
   const controlsRef = useRef<any>(null);
   
   useFrame(() => {
     if (controlsRef.current) {
       // Logic xoay camera: Hoạt động ở CẢ 2 TRẠNG THÁI
-      const isInteracting = handRef.current.active; 
+      // Check cameraMovement trực tiếp thay vì handRef.active để đảm bảo mượt
+      const hasMovement = Math.abs(cameraMovement.x) > 0 || Math.abs(cameraMovement.y) > 0;
 
-      if (isInteracting) {
+      if (hasMovement) {
           // Xoay ngang (Trái/Phải)
           const currentAzimuth = controlsRef.current.getAzimuthalAngle();
           controlsRef.current.setAzimuthalAngle(currentAzimuth + cameraMovement.x);
 
           // Xoay dọc (Trên/Dưới)
-          // SỬA: Dùng dấu trừ (-) cho speedY để tay lên -> nhìn lên trên (camera xuống dưới)
           const currentPolar = controlsRef.current.getPolarAngle();
           const newPolar = currentPolar - cameraMovement.y; 
           
@@ -714,10 +723,13 @@ const Experience = ({ sceneState, cameraMovement, handRef, showHeart }: { sceneS
         </Suspense>
         <Sparkles count={600} scale={50} size={8} speed={0.4} opacity={0.4} color={CONFIG.colors.silver} />
       </group>
-      <EffectComposer multisampling={isMobile ? 0 : 8}>
-        <Bloom luminanceThreshold={0.5} luminanceSmoothing={0.1} intensity={2.5} radius={0.5} mipmapBlur />
-        <Vignette eskil={false} offset={0.1} darkness={1.2} />
-      </EffectComposer>
+      {/* TẮT BLOOM TRÊN MOBILE ĐỂ KHÔNG LAG */}
+      {!isMobile && (
+        <EffectComposer>
+          <Bloom luminanceThreshold={0.5} luminanceSmoothing={0.1} intensity={2.5} radius={0.5} mipmapBlur />
+          <Vignette eskil={false} offset={0.1} darkness={1.2} />
+        </EffectComposer>
+      )}
     </>
   );
 };
@@ -729,6 +741,7 @@ const GestureController = ({ onGesture, onMove, onStatus, debugMode, handRef, on
   const lastGesture = useRef("");
   const lastTime = useRef(0);
   const clickCount = useRef(0);
+  const lastVideoTime = useRef(-1); // Dùng để throttle AI
 
   useEffect(() => {
     let gestureRecognizer: GestureRecognizer;
@@ -761,18 +774,27 @@ const GestureController = ({ onGesture, onMove, onStatus, debugMode, handRef, on
 
     const predictWebcam = () => {
       if (gestureRecognizer && videoRef.current && canvasRef.current) {
+        // --- Throttle AI trên mobile: Chỉ chạy 100ms một lần ---
+        const now = Date.now();
+        if (now - lastVideoTime.current < 100) { // 10 FPS
+             requestRef = requestAnimationFrame(predictWebcam);
+             return;
+        }
+        lastVideoTime.current = now;
+
         if (videoRef.current.videoWidth > 0) {
-            const results = gestureRecognizer.recognizeForVideo(videoRef.current, Date.now());
+            const results = gestureRecognizer.recognizeForVideo(videoRef.current, now);
             const ctx = canvasRef.current.getContext("2d");
+            // Clear canvas debug
+            if (ctx) ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
             if (ctx && debugMode) {
-                ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
                 canvasRef.current.width = videoRef.current.videoWidth; canvasRef.current.height = videoRef.current.videoHeight;
                 if (results.landmarks) for (const landmarks of results.landmarks) {
                         const drawingUtils = new DrawingUtils(ctx);
                         drawingUtils.drawConnectors(landmarks, GestureRecognizer.HAND_CONNECTIONS, { color: "#FFD700", lineWidth: 2 });
                         drawingUtils.drawLandmarks(landmarks, { color: "#FF0000", lineWidth: 1 });
                 }
-            } else if (ctx && !debugMode) ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
+            }
 
             let isHeartFound = false;
 
@@ -819,13 +841,13 @@ const GestureController = ({ onGesture, onMove, onStatus, debugMode, handRef, on
                      
                      // Phát hiện chuỗi: Đóng tay (Closed_Fist) -> Mở tay (Open_Palm)
                      if (currentGesture === "Open_Palm" && lastGesture.current === "Closed_Fist") {
-                         const now = Date.now();
-                         if (now - lastTime.current < 1000) { // Nếu lần 2 trong 1 giây
+                         const nowTime = Date.now();
+                         if (nowTime - lastTime.current < 1000) { // Nếu lần 2 trong 1 giây
                              clickCount.current += 1;
                          } else {
                              clickCount.current = 1; // Reset nếu quá lâu
                          }
-                         lastTime.current = now;
+                         lastTime.current = nowTime;
 
                          // Nếu đủ 2 lần đóng mở
                          if (clickCount.current === 2) {
