@@ -30,7 +30,7 @@ const bodyPhotoPaths = [
   ...Array.from({ length: TOTAL_NUMBERED_PHOTOS }, (_, i) => `${BASE_URL}photos/${i + 1}.jpg`)
 ];
 
-// --- CẤU HÌNH VISUAL (TỐI ƯU CHO MOBILE) ---
+// --- CẤU HÌNH VISUAL ---
 const CONFIG = {
   colors: {
     emerald: '#004225', gold: '#FFD700', silver: '#ECEFF1', red: '#D32F2F',
@@ -159,7 +159,7 @@ const PhotoOrnaments = ({ state, handRef }: { state: 'CHAOS' | 'FORMED', handRef
     const isFormed = state === 'FORMED';
     const time = stateObj.clock.elapsedTime;
     
-    // Chỉ chọn ảnh khi CHAOS
+    // CHỈ CHỌN ẢNH KHI BUNG (CHAOS)
     if (handRef.current.active && state === 'CHAOS') {
         raycaster.setFromCamera({ x: handRef.current.x, y: handRef.current.y }, camera);
         const intersects = raycaster.intersectObjects(groupRef.current.children, true);
@@ -448,11 +448,9 @@ const VOXEL_MATS = {
   chrome: new THREE.MeshStandardMaterial({ color: "#CCCCCC", metalness: 0.9, roughness: 0.1 }),
   tire: new THREE.MeshStandardMaterial({ color: "#222222", roughness: 0.9 }),
   windshield: new THREE.MeshStandardMaterial({ color: "#88CCFF", transparent: true, opacity: 0.6, metalness: 0.9, roughness: 0.1 }),
-  // Thêm màu xanh lá cho hộp quà
   green: new THREE.MeshStandardMaterial({ color: "#2E7D32", roughness: 0.8 }), 
 };
 
-// Danh sách các cặp màu cho hộp quà
 const GIFT_MATS = [
     { box: VOXEL_MATS.red, ribbon: VOXEL_MATS.gold },
     { box: VOXEL_MATS.green, ribbon: VOXEL_MATS.red },
@@ -460,16 +458,12 @@ const GIFT_MATS = [
     { box: VOXEL_MATS.gold, ribbon: VOXEL_MATS.white },
 ];
 
-// Component Hộp quà Voxel
 const VoxelGift = ({ index }: { index: number }) => {
   const mat = GIFT_MATS[index % GIFT_MATS.length];
   return (
     <group>
-       {/* Hộp chính */}
        <mesh material={mat.box}> <boxGeometry args={[0.8, 0.8, 0.8]} /> </mesh>
-       {/* Ruy băng ngang */}
        <mesh material={mat.ribbon}> <boxGeometry args={[0.82, 0.82, 0.2]} /> </mesh>
-       {/* Ruy băng dọc */}
        <mesh material={mat.ribbon}> <boxGeometry args={[0.2, 0.82, 0.82]} /> </mesh>
     </group>
   );
@@ -479,12 +473,10 @@ const VoxelPorscheSanta = () => {
   const wheelGeo = useMemo(() => new THREE.CylinderGeometry(0.6, 0.6, 0.5, 16), []);
   return (
     <group>
-      {/* --- THÂN XE PORSCHE --- */}
       <mesh position={[0, 0.5, 0]} material={VOXEL_MATS.red}> <boxGeometry args={[2.4, 0.7, 5.0]} /> </mesh>
       <mesh position={[0, 0.6, 2.0]} material={VOXEL_MATS.red} rotation={[Math.PI/32, 0, 0]}> <boxGeometry args={[2.3, 0.5, 1.5]} /> </mesh>
       <mesh position={[0, 0.6, -2.0]} material={VOXEL_MATS.red}> <boxGeometry args={[2.3, 0.6, 1.2]} /> </mesh>
       <mesh position={[0, 1.0, -2.4]} material={VOXEL_MATS.red}> <boxGeometry args={[2.2, 0.1, 0.5]} /> </mesh>
-      {/* --- BÁNH XE --- */}
       <group rotation={[0, 0, Math.PI / 2]}>
           <mesh position={[0.5, 1.2, 1.6]} geometry={wheelGeo} material={VOXEL_MATS.tire} /> 
           <mesh position={[0.5, -1.2, 1.6]} geometry={wheelGeo} material={VOXEL_MATS.tire} /> 
@@ -495,12 +487,10 @@ const VoxelPorscheSanta = () => {
           <mesh position={[0.52, 1.2, -1.8]} material={VOXEL_MATS.chrome}> <cylinderGeometry args={[0.3, 0.3, 0.52, 8]} /> </mesh>
           <mesh position={[0.52, -1.2, -1.8]} material={VOXEL_MATS.chrome}> <cylinderGeometry args={[0.3, 0.3, 0.52, 8]} /> </mesh>
       </group>
-      {/* --- NỘI THẤT --- */}
       <mesh position={[0, 0.8, -0.2]} material={VOXEL_MATS.black}> <boxGeometry args={[2.0, 0.4, 2.5]} /> </mesh>
       <mesh position={[0, 0.8, -0.8]} material={VOXEL_MATS.brown}> <boxGeometry args={[1.5, 0.6, 0.8]} /> </mesh>
       <mesh position={[0, 1.4, 0.7]} material={VOXEL_MATS.chrome} rotation={[-Math.PI/6, 0, 0]}> <boxGeometry args={[2.1, 0.8, 0.1]} /> </mesh>
       <mesh position={[0, 1.4, 0.7]} material={VOXEL_MATS.windshield} rotation={[-Math.PI/6, 0, 0]}> <boxGeometry args={[1.9, 0.7, 0.12]} /> </mesh>
-      {/* --- ÔNG GIÀ NOEL --- */}
       <group position={[0, 1.1, -0.8]}>
          <mesh position={[0, 0.3, 0]} material={VOXEL_MATS.brightRed}> <boxGeometry args={[0.9, 0.8, 0.7]} /> </mesh>
          <mesh position={[0, 1.0, 0]} material={VOXEL_MATS.flesh}> <boxGeometry args={[0.6, 0.6, 0.6]} /> </mesh>
@@ -519,7 +509,6 @@ const VoxelPorscheSanta = () => {
   );
 };
 
-// Component Bay (ĐÃ FIX VÀ THÊM QUÀ BAY THEO SAU)
 const FlyingSantaVoxel = () => {
   const groupRef = useRef<THREE.Group>(null);
   const giftRefs = useRef<(THREE.Group | null)[]>([]);
@@ -564,16 +553,13 @@ const FlyingSantaVoxel = () => {
 
   return (
     <group ref={groupRef}>
-      {/* Tăng kích thước lên 1.2 */}
       <group scale={[1.2, 1.2, 1.2]}> 
           <VoxelPorscheSanta />
-          
           {giftsData.map((data, i) => (
             <group key={i} position={data.offset} scale={data.scale} ref={el => giftRefs.current[i] = el}>
                  <VoxelGift index={i} />
             </group>
           ))}
-
           <group position={[0, 0.2, -4.5]}>
              <Sparkles count={150} scale={10} size={8} speed={1.5} opacity={0.8} color="#FFD700" mixColor="#FF0000" />
           </group>
@@ -582,35 +568,27 @@ const FlyingSantaVoxel = () => {
   );
 };
 
-// --- MỚI: HÀM TẠO TEXTURE HÌNH TRÒN MỀM CHO TUYẾT ---
 const createSnowTexture = () => {
   const canvas = document.createElement('canvas');
   canvas.width = 64;
   canvas.height = 64;
   const context = canvas.getContext('2d');
-
   if (context) {
       const gradient = context.createRadialGradient(32, 32, 0, 32, 32, 32);
-      gradient.addColorStop(0, 'rgba(255,255,255,1)'); // Tâm trắng, rõ
-      gradient.addColorStop(1, 'rgba(255,255,255,0)'); // Rìa trong suốt
-
+      gradient.addColorStop(0, 'rgba(255,255,255,1)'); 
+      gradient.addColorStop(1, 'rgba(255,255,255,0)'); 
       context.fillStyle = gradient;
       context.fillRect(0, 0, 64, 64);
   }
-
   const texture = new THREE.CanvasTexture(canvas);
   texture.needsUpdate = true;
   return texture;
 };
 
-
-// --- MỚI: COMPONENT HIỆU ỨNG TUYẾT RƠI (BÔNG TUYẾT TRÒN) ---
 const Snow = () => {
-  const count = CONFIG.counts.snow; // Sử dụng số lượng tối ưu
+  const count = CONFIG.counts.snow; 
   const area = [100, 100, 100]; 
   const pointsRef = useRef<THREE.Points>(null);
-  
-  // Tạo texture một lần duy nhất
   const snowTexture = useMemo(() => createSnowTexture(), []);
 
   const { positions, speeds } = useMemo(() => {
@@ -630,11 +608,9 @@ const Snow = () => {
     const positionsArray = pointsRef.current.geometry.attributes.position.array as Float32Array;
     const bottomY = -area[1] / 2;
     const topY = area[1] / 2;
-
     for (let i = 0; i < count; i++) {
       const i3 = i * 3;
       positionsArray[i3 + 1] -= speeds[i] * delta * 5; 
-
       if (positionsArray[i3 + 1] < bottomY) {
         positionsArray[i3 + 1] = topY;
         positionsArray[i3] = (Math.random() - 0.5) * area[0];
@@ -649,27 +625,16 @@ const Snow = () => {
       <bufferGeometry>
         <bufferAttribute attach="attributes-position" args={[positions, 3]} count={count} itemSize={3} />
       </bufferGeometry>
-      <pointsMaterial
-          size={1.2} // Tăng kích thước lên vì dùng texture
-          map={snowTexture} // Áp dụng texture hình tròn
-          color="#FFFFFF"
-          transparent
-          opacity={0.8}
-          depthWrite={false} 
-          blending={THREE.AdditiveBlending} 
-       />
+      <pointsMaterial size={1.2} map={snowTexture} color="#FFFFFF" transparent opacity={0.8} depthWrite={false} blending={THREE.AdditiveBlending} />
     </points>
   );
 };
 
-
-// --- Component: 3D Cursor (ĐÃ SỬA: CHỈ HIỆN KHI CHAOS) ---
 const Cursor3D = ({ handRef, sceneState }: { handRef: any, sceneState: 'CHAOS' | 'FORMED' }) => {
     const meshRef = useRef<THREE.Mesh>(null);
     const { camera } = useThree();
     useFrame(() => {
         if (meshRef.current) {
-            // Chỉ hiện khi tay hoạt động VÀ đang ở trạng thái CHAOS
             if (handRef.current.active && sceneState === 'CHAOS') {
                 const vec = new THREE.Vector3(handRef.current.x, handRef.current.y, 0.5); 
                 vec.unproject(camera);
@@ -684,32 +649,30 @@ const Cursor3D = ({ handRef, sceneState }: { handRef: any, sceneState: 'CHAOS' |
     return ( <mesh ref={meshRef}> <sphereGeometry args={[0.2, 16, 16]} /> <meshBasicMaterial color="red" transparent opacity={0.8} /> </mesh> );
 }
 
-// --- Main Scene Experience ---
+// --- Main Scene Experience (ĐÃ SỬA: XOAY DỌC HỢP LÝ & NHẠY HƠN) ---
 const Experience = ({ sceneState, cameraMovement, handRef, showHeart }: { sceneState: 'CHAOS' | 'FORMED', cameraMovement: {x: number, y: number}, handRef: any, showHeart: boolean }) => {
   const controlsRef = useRef<any>(null);
   
   useFrame(() => {
     if (controlsRef.current) {
-      // Logic xoay camera (Luôn hoạt động nếu có cameraMovement)
-      const isInteracting = handRef.current.active; // Bỏ check distance để nhạy hơn cho việc xoay
+      // Logic xoay camera: Hoạt động ở CẢ 2 TRẠNG THÁI
+      const isInteracting = handRef.current.active; 
 
       if (isInteracting) {
           // Xoay ngang (Trái/Phải)
           const currentAzimuth = controlsRef.current.getAzimuthalAngle();
           controlsRef.current.setAzimuthalAngle(currentAzimuth + cameraMovement.x);
 
-          // Xoay dọc (Trên/Dưới) - Mới thêm
+          // Xoay dọc (Trên/Dưới)
+          // SỬA: Dùng dấu trừ (-) cho speedY để tay lên -> nhìn lên trên (camera xuống dưới)
           const currentPolar = controlsRef.current.getPolarAngle();
-          // Thêm cameraMovement.y vào góc hiện tại
-          const newPolar = currentPolar + cameraMovement.y;
+          const newPolar = currentPolar - cameraMovement.y; 
           
-          // Giới hạn góc nhìn để không bị lộn ngược (0.5 đến 2.5 radian)
-          // 0 = nhìn từ đỉnh xuống, PI = nhìn từ dưới lên
           if (newPolar > 0.5 && newPolar < 2.5) {
               controlsRef.current.setPolarAngle(newPolar);
           }
       } else if (sceneState === 'FORMED') {
-          // Tự động xoay nhẹ khi ở dạng cây và không có tương tác tay
+          // Tự động xoay nhẹ khi không tương tác
           controlsRef.current.setAzimuthalAngle(controlsRef.current.getAzimuthalAngle() + 0.002);
       }
 
@@ -726,22 +689,18 @@ const Experience = ({ sceneState, cameraMovement, handRef, showHeart }: { sceneS
         enableZoom={true} 
         minDistance={30} 
         maxDistance={120} 
-        autoRotate={false} // Tắt autoRotate mặc định để dùng logic custom ở trên
+        autoRotate={false} 
         maxPolarAngle={Math.PI / 1.5} 
       />
       <color attach="background" args={['#050505']} />
-      {/* THÊM HIỆU ỨNG TUYẾT RƠI Ở ĐÂY */}
       <Snow />
       <Stars radius={100} depth={50} count={5000} factor={4} saturation={0} fade speed={1} />
       <Environment preset="night" background={false} />
       <ambientLight intensity={0.5} color="#404040" />
       <pointLight position={[30, 30, 30]} intensity={100} color={CONFIG.colors.warmLight} />
       <pointLight position={[-30, 10, -30]} intensity={50} color={CONFIG.colors.gold} />
-      
-      {/* Chỉ render bóng đổ khi không phải mobile */}
       <directionalLight position={[10, 50, 20]} intensity={2.0} color="#ffffff" castShadow={!isMobile} />
 
-      {/* Truyền sceneState vào Cursor3D */}
       <Cursor3D handRef={handRef} sceneState={sceneState} />
       <group position={[0, -6, 0]}>
         <Foliage state={sceneState} />
@@ -751,7 +710,6 @@ const Experience = ({ sceneState, cameraMovement, handRef, showHeart }: { sceneS
            <FairyLights state={sceneState} />
            <TopStar state={sceneState} />
            <BigHeart show={showHeart} />
-           {/* ÔNG GIÀ NOEL LÁI PORSCHE VÀ QUÀ BAY NGANG */}
            <FlyingSantaVoxel />
         </Suspense>
         <Sparkles count={600} scale={50} size={8} speed={0.4} opacity={0.4} color={CONFIG.colors.silver} />
@@ -764,11 +722,10 @@ const Experience = ({ sceneState, cameraMovement, handRef, showHeart }: { sceneS
   );
 };
 
-// --- Gesture Controller ---
+// --- Gesture Controller (ĐÃ SỬA: TĂNG ĐỘ NHẠY, GIẢM DEADZONE, DOUBLE CLENCH) ---
 const GestureController = ({ onGesture, onMove, onStatus, debugMode, handRef, onHeartStatus }: any) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  // Refs cho Double Clench Detection
   const lastGesture = useRef("");
   const lastTime = useRef(0);
   const clickCount = useRef(0);
@@ -817,7 +774,6 @@ const GestureController = ({ onGesture, onMove, onStatus, debugMode, handRef, on
                 }
             } else if (ctx && !debugMode) ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
 
-            // --- XỬ LÝ CỬ CHỈ ---
             let isHeartFound = false;
 
             if (results.landmarks.length === 2) {
@@ -840,7 +796,6 @@ const GestureController = ({ onGesture, onMove, onStatus, debugMode, handRef, on
                 const lm = results.landmarks[0];
                 const thumb = lm[4]; const index = lm[8];
                 
-                // Cursor X, Y (-1 đến 1)
                 const cursorX = (0.5 - index.x) * 2; 
                 const cursorY = (0.5 - index.y) * 2;
 
@@ -848,34 +803,34 @@ const GestureController = ({ onGesture, onMove, onStatus, debugMode, handRef, on
 
                 handRef.current = { active: true, x: cursorX, y: cursorY, distance: distance };
 
-                // Tính tốc độ xoay X và Y
-                const deadzone = 0.1;
+                // SỬA: Giảm Deadzone xuống 0.05 và tăng tốc độ xoay lên 0.05
+                const deadzone = 0.05;
                 let speedX = 0;
                 let speedY = 0;
 
-                if (Math.abs(cursorX) > deadzone) speedX = cursorX * 0.03;
-                if (Math.abs(cursorY) > deadzone) speedY = cursorY * 0.03;
+                if (Math.abs(cursorX) > deadzone) speedX = cursorX * 0.05;
+                if (Math.abs(cursorY) > deadzone) speedY = cursorY * 0.05;
 
                 onMove({ x: speedX, y: speedY });
 
-                // --- DOUBLE CLENCH DETECTION (ĐÓNG MỞ 2 LẦN) ---
+                // --- DOUBLE CLENCH LOGIC ---
                 if (results.gestures.length > 0 && results.gestures[0].length > 0) {
                      const currentGesture = results.gestures[0][0].categoryName;
                      
-                     // Phát hiện khi chuyển từ Nắm (Closed_Fist) sang Mở (Open_Palm)
+                     // Phát hiện chuỗi: Đóng tay (Closed_Fist) -> Mở tay (Open_Palm)
                      if (currentGesture === "Open_Palm" && lastGesture.current === "Closed_Fist") {
                          const now = Date.now();
-                         if (now - lastTime.current < 1000) { // Nếu lần 2 trong vòng 1 giây
+                         if (now - lastTime.current < 1000) { // Nếu lần 2 trong 1 giây
                              clickCount.current += 1;
                          } else {
-                             clickCount.current = 1; // Reset đếm nếu quá lâu
+                             clickCount.current = 1; // Reset nếu quá lâu
                          }
                          lastTime.current = now;
 
+                         // Nếu đủ 2 lần đóng mở
                          if (clickCount.current === 2) {
-                             // Kích hoạt Toggle
                              onGesture((s: string) => s === 'CHAOS' ? 'FORMED' : 'CHAOS');
-                             clickCount.current = 0; // Reset
+                             clickCount.current = 0; 
                          }
                      }
                      lastGesture.current = currentGesture;
@@ -936,7 +891,6 @@ const MusicPlayer = () => {
 // --- App Entry ---
 export default function GrandTreeApp() {
   const [sceneState, setSceneState] = useState<'CHAOS' | 'FORMED'>('CHAOS');
-  // State cameraMovement chứa cả X và Y
   const [cameraMovement, setCameraMovement] = useState({ x: 0, y: 0 });
   const [aiStatus, setAiStatus] = useState("INITIALIZING...");
   const [debugMode, setDebugMode] = useState(false);
