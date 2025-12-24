@@ -38,10 +38,8 @@ const CONFIG = {
     lights: ['#FF0000', '#00FF00', '#0000FF', '#FFFF00'],
     borders: ['#FFFAF0', '#F0E68C', '#E6E6FA', '#FFB6C1', '#98FB98', '#87CEFA', '#FFDAB9'],
     giftColors: ['#D32F2F', '#FFD700', '#1976D2', '#2E7D32'],
-    // Thêm màu xám cho emissive để tránh cháy sáng
     neutralGray: '#666666',
   },
-  // Giảm số lượng hạt trên mobile để giảm tải CPU/GPU
   counts: { 
     foliage: isMobile ? 6000 : 15000, 
     ornaments: 300, 
@@ -122,7 +120,7 @@ const Foliage = ({ state }: { state: 'CHAOS' | 'FORMED' }) => {
   );
 };
 
-// --- Component: Photo Ornaments (ĐÃ SỬA: HITBOX LỚN HƠN, ZOOM TỐT HƠN, KHÔNG CHÁY SÁNG) ---
+// --- Component: Photo Ornaments (ĐÃ SỬA: CHỈ CHỌN ẢNH KHI CHAOS) ---
 const PhotoOrnaments = ({ state, handRef }: { state: 'CHAOS' | 'FORMED', handRef: any }) => {
   const textures = useTexture(CONFIG.photos.body);
   const count = CONFIG.counts.ornaments;
@@ -131,7 +129,6 @@ const PhotoOrnaments = ({ state, handRef }: { state: 'CHAOS' | 'FORMED', handRef
 
   const borderGeometry = useMemo(() => new THREE.PlaneGeometry(1.2, 1.5), []);
   const photoGeometry = useMemo(() => new THREE.PlaneGeometry(1, 1), []);
-  // Geometery cho vùng chọn (hitbox) vô hình, lớn hơn ảnh thật
   const hitboxGeometry = useMemo(() => new THREE.BoxGeometry(1.5, 1.8, 0.2), []);
   const hoveredIndexRef = useRef<number | null>(null);
 
@@ -162,20 +159,23 @@ const PhotoOrnaments = ({ state, handRef }: { state: 'CHAOS' | 'FORMED', handRef
     const isFormed = state === 'FORMED';
     const time = stateObj.clock.elapsedTime;
     
-    if (handRef.current.active) {
+    // --- SỬA Ở ĐÂY: Chỉ cho phép raycasting (chọn ảnh) khi state là CHAOS ---
+    if (handRef.current.active && state === 'CHAOS') {
         raycaster.setFromCamera({ x: handRef.current.x, y: handRef.current.y }, camera);
-        // Raycaster sẽ check va chạm với các hitbox vô hình
         const intersects = raycaster.intersectObjects(groupRef.current.children, true);
         if (intersects.length > 0) {
             let object = intersects[0].object;
-            // Tìm group cha chứa toàn bộ ảnh
             while(object.parent && object.parent !== groupRef.current) { object = object.parent; }
             hoveredIndexRef.current = groupRef.current.children.indexOf(object);
         } else { hoveredIndexRef.current = null; }
-    } else { hoveredIndexRef.current = null; }
+    } else { 
+        // Nếu tay không hoạt động HOẶC đang ở dạng cây (FORMED), reset việc chọn
+        hoveredIndexRef.current = null; 
+    }
 
     let handOffsetX = 0;
     let handOffsetY = 0;
+    // Chỉ tính offset di chuyển khi ở dạng CHAOS
     if (!isFormed && handRef.current.active) {
         handOffsetX = handRef.current.x * 30; 
         handOffsetY = handRef.current.y * 30;
@@ -195,16 +195,12 @@ const PhotoOrnaments = ({ state, handRef }: { state: 'CHAOS' | 'FORMED', handRef
       objData.currentPos.lerp(target, delta * (isFormed ? 0.8 * objData.weight : 2.0));
       group.position.copy(objData.currentPos);
       
-      // SỬA LOGIC ZOOM: Zoom to hơn khi hover
       let targetScale = objData.baseScale;
+      // hoveredIndexRef.current sẽ luôn là null nếu ở dạng FORMED, nên ảnh sẽ không bao giờ zoom/sáng lên
       if (hoveredIndexRef.current === i) {
-          // Zoom mặc định khi hover là 2.5 lần (trước là 1.2)
           const hoverZoomBase = objData.baseScale * 2.5;
           targetScale = hoverZoomBase;
-          
-          // Zoom thêm khi nhúm tay (pinch)
           if (handRef.current.distance > 0.05) {
-              // Hệ số zoom dựa trên khoảng cách 2 ngón tay
               const pinchFactor = 1 + (handRef.current.distance * 5.0); 
               targetScale = Math.min(objData.baseScale * 6.0, hoverZoomBase * pinchFactor);
           }
@@ -229,23 +225,18 @@ const PhotoOrnaments = ({ state, handRef }: { state: 'CHAOS' | 'FORMED', handRef
     <group ref={groupRef}>
       {data.map((obj, i) => (
         <group key={i} scale={[obj.baseScale, obj.baseScale, obj.baseScale]} rotation={state === 'CHAOS' ? obj.chaosRotation : [0,0,0]}>
-          
-          {/* MỚI: HITBOX VÔ HÌNH ĐỂ DỄ CHỌN HƠN */}
           <mesh geometry={hitboxGeometry} visible={false}>
              <meshBasicMaterial transparent opacity={0} />
           </mesh>
-
           <group position={[0, 0, 0.015]}>
             <mesh geometry={photoGeometry}>
-              {/* SỬA: GIẢM EMISSIVE ĐỂ TRÁNH CHÁY SÁNG */}
               <meshStandardMaterial 
                 map={textures[obj.textureIndex]} 
                 roughness={0.5} 
                 metalness={0}
-                // Sử dụng màu xám trung tính thay vì trắng
                 emissive={CONFIG.colors.neutralGray} 
                 emissiveMap={textures[obj.textureIndex]} 
-                // Giảm cường độ: Bình thường 0.1, khi hover 0.4 (trước là 1.0 và 1.5)
+                // Emissive intensity chỉ tăng khi được hover (mà hover chỉ xảy ra khi CHAOS)
                 emissiveIntensity={hoveredIndexRef.current === i ? 0.4 : 0.1} 
                 side={THREE.FrontSide} 
               />
@@ -253,7 +244,6 @@ const PhotoOrnaments = ({ state, handRef }: { state: 'CHAOS' | 'FORMED', handRef
             <mesh geometry={borderGeometry} position={[0, -0.15, -0.01]}>
               <meshStandardMaterial 
                 color={hoveredIndexRef.current === i ? '#FFFF00' : obj.borderColor} 
-                // Viền cũng giảm độ phát sáng
                 emissive={hoveredIndexRef.current === i ? '#FFFF00' : '#000000'} 
                 emissiveIntensity={hoveredIndexRef.current === i ? 0.3 : 0}
                 roughness={0.9} 
@@ -262,10 +252,8 @@ const PhotoOrnaments = ({ state, handRef }: { state: 'CHAOS' | 'FORMED', handRef
               />
             </mesh>
           </group>
-          {/* Mặt sau */}
           <group position={[0, 0, -0.015]} rotation={[0, Math.PI, 0]}>
             <mesh geometry={photoGeometry}>
-               {/* Mặt sau cũng áp dụng giảm sáng */}
               <meshStandardMaterial map={textures[obj.textureIndex]} roughness={0.5} metalness={0} emissive={CONFIG.colors.neutralGray} emissiveMap={textures[obj.textureIndex]} emissiveIntensity={0.1} side={THREE.FrontSide} />
             </mesh>
             <mesh geometry={borderGeometry} position={[0, -0.15, -0.01]}>
@@ -681,13 +669,14 @@ const Snow = () => {
 };
 
 
-// --- Component: 3D Cursor ---
-const Cursor3D = ({ handRef }: { handRef: any }) => {
+// --- Component: 3D Cursor (ĐÃ SỬA: CHỈ HIỆN KHI CHAOS) ---
+const Cursor3D = ({ handRef, sceneState }: { handRef: any, sceneState: 'CHAOS' | 'FORMED' }) => {
     const meshRef = useRef<THREE.Mesh>(null);
     const { camera } = useThree();
     useFrame(() => {
         if (meshRef.current) {
-            if (handRef.current.active) {
+            // Chỉ hiện khi tay hoạt động VÀ đang ở trạng thái CHAOS
+            if (handRef.current.active && sceneState === 'CHAOS') {
                 const vec = new THREE.Vector3(handRef.current.x, handRef.current.y, 0.5); 
                 vec.unproject(camera);
                 vec.sub(camera.position).normalize();
@@ -727,7 +716,8 @@ const Experience = ({ sceneState, rotationSpeed, handRef, showHeart }: { sceneSt
       {/* Chỉ render bóng đổ khi không phải mobile */}
       <directionalLight position={[10, 50, 20]} intensity={2.0} color="#ffffff" castShadow={!isMobile} />
 
-      <Cursor3D handRef={handRef} />
+      {/* Truyền sceneState vào Cursor3D */}
+      <Cursor3D handRef={handRef} sceneState={sceneState} />
       <group position={[0, -6, 0]}>
         <Foliage state={sceneState} />
         <Suspense fallback={null}>
