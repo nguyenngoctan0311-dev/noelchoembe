@@ -120,7 +120,7 @@ const Foliage = ({ state }: { state: 'CHAOS' | 'FORMED' }) => {
   );
 };
 
-// --- Component: Photo Ornaments (CHỈ CHỌN ẢNH KHI CHAOS) ---
+// --- Component: Photo Ornaments ---
 const PhotoOrnaments = ({ state, handRef }: { state: 'CHAOS' | 'FORMED', handRef: any }) => {
   const textures = useTexture(CONFIG.photos.body);
   const count = CONFIG.counts.ornaments;
@@ -159,7 +159,7 @@ const PhotoOrnaments = ({ state, handRef }: { state: 'CHAOS' | 'FORMED', handRef
     const isFormed = state === 'FORMED';
     const time = stateObj.clock.elapsedTime;
     
-    // --- CHỈ RAYCAST (CHỌN ẢNH) KHI CHAOS ---
+    // Chỉ chọn ảnh khi CHAOS
     if (handRef.current.active && state === 'CHAOS') {
         raycaster.setFromCamera({ x: handRef.current.x, y: handRef.current.y }, camera);
         const intersects = raycaster.intersectObjects(groupRef.current.children, true);
@@ -730,6 +730,7 @@ const Experience = ({ sceneState, cameraMovement, handRef, showHeart }: { sceneS
         maxPolarAngle={Math.PI / 1.5} 
       />
       <color attach="background" args={['#050505']} />
+      {/* THÊM HIỆU ỨNG TUYẾT RƠI Ở ĐÂY */}
       <Snow />
       <Stars radius={100} depth={50} count={5000} factor={4} saturation={0} fade speed={1} />
       <Environment preset="night" background={false} />
@@ -737,8 +738,10 @@ const Experience = ({ sceneState, cameraMovement, handRef, showHeart }: { sceneS
       <pointLight position={[30, 30, 30]} intensity={100} color={CONFIG.colors.warmLight} />
       <pointLight position={[-30, 10, -30]} intensity={50} color={CONFIG.colors.gold} />
       
+      {/* Chỉ render bóng đổ khi không phải mobile */}
       <directionalLight position={[10, 50, 20]} intensity={2.0} color="#ffffff" castShadow={!isMobile} />
 
+      {/* Truyền sceneState vào Cursor3D */}
       <Cursor3D handRef={handRef} sceneState={sceneState} />
       <group position={[0, -6, 0]}>
         <Foliage state={sceneState} />
@@ -748,6 +751,7 @@ const Experience = ({ sceneState, cameraMovement, handRef, showHeart }: { sceneS
            <FairyLights state={sceneState} />
            <TopStar state={sceneState} />
            <BigHeart show={showHeart} />
+           {/* ÔNG GIÀ NOEL LÁI PORSCHE VÀ QUÀ BAY NGANG */}
            <FlyingSantaVoxel />
         </Suspense>
         <Sparkles count={600} scale={50} size={8} speed={0.4} opacity={0.4} color={CONFIG.colors.silver} />
@@ -764,6 +768,10 @@ const Experience = ({ sceneState, cameraMovement, handRef, showHeart }: { sceneS
 const GestureController = ({ onGesture, onMove, onStatus, debugMode, handRef, onHeartStatus }: any) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  // Refs cho Double Clench Detection
+  const lastGesture = useRef("");
+  const lastTime = useRef(0);
+  const clickCount = useRef(0);
 
   useEffect(() => {
     let gestureRecognizer: GestureRecognizer;
@@ -787,7 +795,7 @@ const GestureController = ({ onGesture, onMove, onStatus, debugMode, handRef, on
           if (videoRef.current) {
             videoRef.current.srcObject = stream;
             videoRef.current.play();
-            onStatus("AI READY: 1 HAND=ROTATE | 2 HANDS=HEART");
+            onStatus("AI READY: OPEN HAND=ROTATE | DOUBLE CLENCH=TOGGLE");
             predictWebcam();
           }
         } else { onStatus("ERROR: CAMERA PERMISSION DENIED"); }
@@ -850,13 +858,27 @@ const GestureController = ({ onGesture, onMove, onStatus, debugMode, handRef, on
 
                 onMove({ x: speedX, y: speedY });
 
+                // --- DOUBLE CLENCH DETECTION (ĐÓNG MỞ 2 LẦN) ---
                 if (results.gestures.length > 0 && results.gestures[0].length > 0) {
-                     const name = results.gestures[0][0].categoryName; 
-                     const score = results.gestures[0][0].score;
-                     if (score > 0.5) {
-                        if (name === "Open_Palm") onGesture("CHAOS");
-                        if (name === "Closed_Fist") onGesture("FORMED");
+                     const currentGesture = results.gestures[0][0].categoryName;
+                     
+                     // Phát hiện khi chuyển từ Nắm (Closed_Fist) sang Mở (Open_Palm)
+                     if (currentGesture === "Open_Palm" && lastGesture.current === "Closed_Fist") {
+                         const now = Date.now();
+                         if (now - lastTime.current < 1000) { // Nếu lần 2 trong vòng 1 giây
+                             clickCount.current += 1;
+                         } else {
+                             clickCount.current = 1; // Reset đếm nếu quá lâu
+                         }
+                         lastTime.current = now;
+
+                         if (clickCount.current === 2) {
+                             // Kích hoạt Toggle
+                             onGesture((s: string) => s === 'CHAOS' ? 'FORMED' : 'CHAOS');
+                             clickCount.current = 0; // Reset
+                         }
                      }
+                     lastGesture.current = currentGesture;
                 }
             } else if (!isHeartFound) { 
                 handRef.current.active = false;
@@ -942,7 +964,7 @@ export default function GrandTreeApp() {
         <div>
             <p style={{ color: '#aaa', fontSize: '12px', lineHeight: '1.5' }}>
                 👉 Move hand to Rotate Tree (Left/Right/Up/Down).<br/>
-                🫶 <b>Make a HEART with 2 hands!</b>
+                ✊✊ <b>Close-Open 2 times to Toggle!</b>
             </p>
         </div>
       </div>
